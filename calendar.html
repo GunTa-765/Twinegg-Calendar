@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calendar</title>
+    <style>
+        body { font-family: sans-serif; background: #f3f4f6; margin: 0; padding: 0; box-sizing: border-box; }
+        .title { color: #0066cc; margin: 0; font-size: 20px; }
+        .text-sun { color: red; } .text-sat { color: blue; }
+        .plan-item { font-size: 11px; background: #0066cc; color: white; padding: 2px 4px; border-radius: 3px; margin-top: 2px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
+        .btn { padding: 4px 10px; border: 1px solid #ccc; background: white; border-radius: 4px; cursor: pointer; font-size: 13px; }
+        .btn-add { width: 100%; background: #0066cc; color: white; border: none; padding: 8px; border-radius: 4px; font-weight: bold; cursor: pointer; }
+        .btn-export { width: 100%; background: #34c759; color: white; border: none; padding: 8px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 13px; }
+        .input-text { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; margin-bottom: 10px; box-sizing: border-box; }
+        .cell-top { display: flex; justify-content: space-between; align-items: flex-end; width: 100%; box-sizing: border-box; margin-bottom: 2px; }
+        .rokuyo { font-size: 11px; font-weight: 600; padding: 1px 4px; border-radius: 3px; margin-left: auto; }
+        .rokuyo-normal { color: #555555; } .rokuyo-taian { color: #1b5e20; background: #e8f5e9; } .rokuyo-butsumetsu { color: #4a148c; background: #f3e5f5; }
+        .holiday-name { font-size: 11px; font-weight: bold; color: #ff3b30; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .list-item { display: flex; justify-content: space-between; background: #f9fafb; padding: 6px; border: 1px solid #eee; border-radius: 4px; margin-bottom: 4px; font-size: 14px; }
+        .side-title { margin-top: 0; border-bottom: 1px solid #ddd; padding-bottom: 8px; }
+        .btn-settings-toggle, .mobile-fab, .mobile-modal { display: none; }
+        .lock-screen { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #f3f4f6; display: flex; justify-content: center; align-items: center; z-index: 9999; flex-direction: column; }
+        .lock-box { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); text-align: center; width: 85%; max-width: 280px; }
+        @media screen and (min-width: 769px) {
+            body, .container { height: 100vh; width: 100vw; overflow: hidden; }
+            .container { margin: 0; display: flex; gap: 0; box-sizing: border-box; }
+            .calendar-box { flex: 1; min-width: 0; background: white; padding: 20px; display: flex; flex-direction: column; height: 100vh; box-sizing: border-box; }
+            .side-box { width: 300px; flex-shrink: 0; background: white; padding: 20px; border-left: 1px solid #e5e7eb; display: flex; flex-direction: column; justify-content: space-between; height: 100vh; box-sizing: border-box; }
+            .header { display: flex; align-items: center; margin-bottom: 20px; position: relative; width: 100%; height: 40px; }
+            .header-center { display: flex; align-items: center; gap: 15px; position: absolute; left: 50%; transform: translateX(-50%); }
+            .header-right { position: absolute; right: 0; display: flex; align-items: center; gap: 15px; }
+            .days-grid, .weeks-grid { display: grid; grid-template-columns: repeat(7, 1fr); width: 100%; }
+            .days-grid { text-align: center; font-weight: bold; font-size: 12px; border-bottom: 1px solid #ddd; padding-bottom: 10px; }
+            .weeks-grid { grid-template-rows: repeat(6, 1fr); gap: 4px; flex: 1; height: 100%; }
+            .day-cell { height: 100%; width: 100%; border: 1px solid #e5e7eb; padding: 6px 12px; cursor: pointer; display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden; }
+            .empty-cell { height: 100%; width: 100%; background: #f9fafb; border: 1px solid #f3f4f6; box-sizing: border-box; }
+        }
+        @media screen and (max-width: 768px) {
+            body { height: auto; width: 100vw; overflow-x: hidden; overflow-y: auto; }
+            .container { width: 100vw; display: flex; flex-direction: column; gap: 0; box-sizing: border-box; }
+            .calendar-box { width: 100vw; background: white; padding: 10px; display: flex; flex-direction: column; box-sizing: border-box; }
+            .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; width: 100%; height: 40px; }
+            .header-center { display: flex; align-items: center; gap: 10px; }
+            .header-right .btn-today { display: none; }
+            .btn-settings-toggle { display: block; font-size: 20px; background: none; border: none; cursor: pointer; }
+            .days-grid { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-weight: bold; font-size: 12px; border-bottom: 1px solid #ddd; padding-bottom: 6px; margin-bottom: 6px; }
+            .weeks-grid { display: grid; grid-template-columns: repeat(7, 1fr); grid-auto-rows: minmax(65px, auto); gap: 2px; width: 100%; }
+            .day-cell { min-height: 65px; border: 1px solid #e5e7eb; padding: 4px; cursor: pointer; display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden; background: white; }
+            .empty-cell { min-height: 65px; background: #f9fafb; border: 1px solid #f3f4f6; box-sizing: border-box; }
+            .side-box { width: 100vw; background: white; padding: 15px; border-top: 1px solid #e5e7eb; box-sizing: border-box; }
+            .pc-input-area { display: none; }
+            .mobile-fab { display: flex; position: fixed; bottom: 24px; right: 24px; width: 56px; height: 56px; background: #0066cc; color: white; border: none; border-radius: 50%; font-size: 28px; justify-content: center; align-items: center; box-shadow: 0 4px 10px rgba(0,0,0,0.3); cursor: pointer; z-index: 90; }
+            .mobile-modal { display: flex; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.5); justify-content: center; align-items: center; z-index: 200; box-sizing: border-box; }
+            .mobile-modal-content { background: white; padding: 20px; width: 85%; max-width: 320px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+            .mobile-modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 15px; }
+        }
+    </style>
+</head>
+<body>
+    <div id="lock-screen" class="lock-screen">
+        <div class="lock-box">
+            <h3 style="margin-top:0; color:#333;">パスワードを入力</h3>
+            <input type="password" id="pw-input" class="input-text" style="text-align:center; font-size:18px;" placeholder="••••" onkeydown="if(event.key==='Enter')checkPW()">
+            <button class="btn-add" onclick="checkPW()">解除</button>
+            <p id="pw-error" style="color:red; font-size:12px; margin-bottom:0; display:none;">パスワードが違います</p>
+        </div>
+    </div>
+    <div id="app-container" class="container" style="display: none;">
+        <div class="calendar-box">
+            <div class="header">
+                <div class="header-left"></div>
+                <div class="header-center">
+                    <button class="btn" onclick="chM(-1)">◀</button>
+                    <h2 id="calendar-title" class="title"></h2>
+                    <button class="btn" onclick="chM(1)">▶</button>
+                </div>
+                <div class="header-right">
+                    <button class="btn btn-today" onclick="goT()">今日</button>
+                    <button class="btn btn-settings-toggle" onclick="tgS()">⚙️</button>
+                </div>
+            </div>
+            <div class="days-grid">
+                <div class="text-sun">日</div><div>月</div><div>火</div><div>水</div><div>木</div><div>金</div><div class="text-sat">土</div>
+            </div>
+            <div class="weeks-grid" id="calendar-days"></div>
+        </div>
+        <div class="side-box">
+            <div>
+                <h3 id="side-title" class="side-title"></h3>
+                <div id="plan-list"></div>
+            </div>
+            <div class="pc-input-area">
+                <input type="text" id="plan-input" class="input-text" placeholder="予定を入力">
+                <button class="btn-add" onclick="addP()">予定を追加</button>
+                <button class="btn-export" onclick="exp()">CSVでエクスポート</button>
+                <div style="margin-top: 15px; padding-top: 15px; border-top: 1px dashed #ddd;">
+                    <label style="font-size: 12px; font-weight: bold; color: #555; display: block; margin-bottom: 5px;">CSVからインポート</label>
+                    <input type="file" accept=".csv" style="font-size: 12px; width: 100%;" onchange="imp(this)">
+                </div>
+            </div>
+        </div>
+    </div>
+    <button class="mobile-fab" onclick="opM()">＋</button>
+    <div id="mobile-add-modal" class="mobile-modal" style="display: none;">
+        <div class="mobile-modal-content">
+            <h3>新しい予定を追加</h3>
+            <input type="text" id="mobile-plan-input" class="input-text" placeholder="予定を入力してください">
+            <div class="mobile-modal-actions">
+                <button class="btn" onclick="clM()">キャンセル</button>
+                <button class="btn-add" onclick="addPM()" style="width: auto; padding: 6px 15px;">追加</button>
+            </div>
+        </div>
+    </div>
+    <div id="mobile-settings-modal" class="mobile-modal" style="display: none;">
+        <div class="mobile-modal-content">
+            <h3>カレンダー設定</h3>
+            <button class="btn-export" onclick="exp()" style="margin-bottom: 15px;">CSVでエクスポート</button>
+            <div style="padding-top: 15px; border-top: 1px dashed #ddd; margin-bottom: 15px;">
+                <label style="font-size: 12px; font-weight: bold; color: #555; display: block; margin-bottom: 5px;">CSVからインポート</label>
+                <input type="file" accept=".csv" style="font-size: 12px; width: 100%;" onchange="imp(this); tgS();">
+            </div>
+            <button class="btn" style="width: 100%;" onclick="tgS()">閉じる</button>
+        </div>
+    </div>
+    <script>
+        const PW = "~}AyhaJx5~E^:3b"; // ★解除パスワード
+        const KEY = 'y_cal_data_sites';
+        let cur = new Date(), sel = dK(cur.getFullYear(), cur.getMonth() + 1, cur.getDate()), sched = {};
+        const initData = {
+            "2020-3-7": ["car 10:00 車検"], "2020-3-9": ["shopping まんがタイムきらら"],
+            "2020-3-14": ["doctor 09:45 接骨院", "car 14:00 車検引き取り"],
+            "2026-10-1": ["カレンダーアプリ設置記念日"], "2026-10-15": ["ゴミ拾いイベント"],
+            "2026-10-25": ["Twineggカレンダー動作確認テスト", "本日完了！"]
+        };
+        function checkPW() {
+            if (document.getElementById('pw-input').value === PW) {
+                document.getElementById('lock-screen').style.display = 'none';
+                document.getElementById('app-container').style.display = 'flex';
+                try { sched = JSON.parse(localStorage.getItem(KEY)) || initData; if(Object.keys(sched).length===0) sched=initData; } catch(e) { sched=initData; }
+                draw();
+            } else {
+                document.getElementById('pw-error').style.display = 'block';
+                document.getElementById('pw-input').value = ''; document.getElementById('pw-input').focus();
+            }
+        }
+        function save() { try { localStorage.setItem(KEY, JSON.stringify(sched)); } catch(e){} }
+        function dK(y, m, d) { return `${y}-${m}-${d}`; }
+        function nthM(y, mIdx, n) { const f = new Date(y, mIdx, 1); return 1 + ((1 - f.getDay() + 7) % 7) + (n - 1) * 7; }
+        function shun(y) { return Math.floor(20.8431 + 0.242194 * (y - 1851) - Math.floor((y - 1851) / 4)); }
+        function shub(y) { return Math.floor(23.2488 + 0.242194 * (y - 1851) - Math.floor((y - 1851) / 4)); }
+        function getHol(y) {
+            const r = {}; const add = (m, d, n) => { r[dK(y, m, d)] = n; };
+            add(1, 1, '元日'); add(1, nthM(y, 0, 2), '成人の日'); add(2, 11, '建国記念の日'); add(2, 23, '天皇誕生日');
+            add(3, shun(y), '春分の日'); add(4, 29, '昭和の日'); add(5, 3, '憲法記念日'); add(5, 4, 'みどりの日');
+            add(5, 5, 'こどもの日'); add(7, nthM(y, 6, 3), '海の日'); add(8, 11, '山の日'); add(9, nthM(y, 8, 3), '敬老の日');
+            add(9, shub(y), '秋分の日'); add(10, nthM(y, 9, 2), 'スポーツの日'); add(11, 3, '文化の日'); add(11, 23, '勤労感謝の日');
+            const isH = (m, d) => Boolean(r[dK(y, m, d)]); const lastD = (m) => new Date(y, m, 0).getDate();
+            Object.keys(r).forEach((k) => {
+                const [yy, mm, dd] = k.split('-').map(Number); if (new Date(yy, mm - 1, dd).getDay() !== 0) return;
+                let m = mm, d = dd + 1;
+                while (d > lastD(m)) { d -= lastD(m); m += 1; if (m > 12) return; }
+                while (m <= 12 && isH(m, d)) { d += 1; if (d > lastD(m)) { d = 1; m += 1; } }
+                if (m <= 12 && !isH(m, d)) add(m, d, '振替休日');
+            });
+            for (let m = 1; m <= 12; m++) { for (let d = 2; d < lastD(m); d++) { if (!isH(m, d) && isH(m, d - 1) && isH(m, d + 1)) add(m, d, '国民の休日'); } }
+            return r;
+        }
+        function getRok(y, m, d) {
+            const list = ["大安", "赤口", "先勝", "友引", "先負", "仏滅"];
+            const offsets = (y === 2027 ? "3,5,5,0,1,3,4,5,0,1,3,4" : "0,2,2,3,5,0,1,3,4,5,1,2").split(",");
+            return list[(d + Number(offsets[m - 1] || 0)) % 6];
+        }
+        function draw() {
+            const y = cur.getFullYear(), m = cur.getMonth(), first = new Date(y, m, 1).getDay(), last = new Date(y, m + 1, 0).getDate();
+            const hols = getHol(y); document.getElementById('calendar-title').innerText = `${y}年 ${m + 1}月`;
+            const container = document.getElementById('calendar-days'); container.innerHTML = '';
+            for (let i = 0; i < first; i++) container.innerHTML += '<div class="empty-cell"></div>';
+            for (let d = 1; d <= last; d++) {
+                const k = dK(y, m + 1, d), w = new Date(y, m, d).getDay(), h = hols[k];
+                let c = 'day-normal'; if (w === 0 || h) c = 'day-sun-holiday'; else if (w === 6) c = 'day-sat';
+                const pList = (sched[k] || []).map(p => `<div class="plan-item">${p}</div>`).join('');
+                const r = getRok(y, m + 1, d), rc = r === "大安" ? "rokuyo-taian" : r === "仏滅" ? "rokuyo-butsumetsu" : "rokuyo-normal";
+                container.innerHTML += `<div class="day-cell ${c} ${sel === k ? 'selected' : ''}" onclick="selectDate('${k}')"><div class="cell-top"><span style="font-size:20px; font-weight:bold; color:${w===0||h?'red':w===6?'blue':''};">${d}</span><span class="rokuyo ${rc}">${r}</span></div>${h ? `<span class="holiday-name">${h}</span>` : ''}<div style="margin-top:auto;"></div>${pList}</div>`;
+            }
+            document.getElementById('side-title').innerText = `${sel} の予定`; rL();
+        }
+        function chM(v) { cur.setMonth(cur.getMonth() + v); draw(); }
+        function selectDate(k) { sel = k; draw(); }
+        function goT() { cur = new Date(); sel = dK(cur.getFullYear(), cur.getMonth() + 1, cur.getDate()); draw(); }
+        function rL() {
+            const list = sched[sel] || [];
+            document.getElementById('plan-list').innerHTML = list.length === 0 ? "<p style='color:#999;font-size:13px;'>予定はありません</p>" : list.map((p, i) => `<div class="list-item"><span>${p}</span><button style="color:red;border:none;background:none;cursor:pointer;font-weight:bold;" onclick="delP(${i})">×</button></div>`).join('');
+        }
+        function addP() {
+            const input = document.getElementById('plan-input'), t = input.value.trim(); if (!t) return;
+            if (!sched[sel]) sched[sel] = []; sched[sel].push(t); save(); input.value = ''; draw();
+        }
+        function delP(i) { sched[sel].splice(i, 1); if (sched[sel].length === 0) delete sched[sel]; save(); draw(); }
+        function exp() {
+            if (Object.keys(sched).length === 0) { alert("予定がありません。"); return; }
+            let rows = [];
+            Object.keys(sched).sort((a,b)=>{const [yA,mA,dA]=a.split('-').map(Number),[yB,mB,dB]=b.split('-').map(Number); return new Date(yA,mA-1,dA)-new Date(yB,mB-1,dB);}).forEach(k=>{
+                const [y,m,d] = k.split('-'); sched[k].forEach(p=>{ rows.push(`${y}年,${String(m).padStart(2,'0')}月,${String(d).padStart(2,'0')}日,"${p.replace(/"/g, '""')}"`); });
+            });
+            const link = document.createElement("a"); link.setAttribute("href", URL.createObjectURL(new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), rows.join('\r\n')], { type: 'text/csv;charset=utf-8;' })));
+            link.setAttribute("download", "calendar_plans.csv"); link.style.visibility = 'hidden'; document.body.appendChild(link); link.click(); document.body.removeChild(link);
+        }
+        function imp(input) {
+            const file = input.files; if (!file) return; const reader = new FileReader();
+            reader.onload = function(e) {
+                const lines = e.target.result.split("\n"); let count = 0;
+                for (let i = 0; i < lines.length; i++) {
+                    let line = lines[i].trim(); if (!line) continue;
+                    const parts = line.split(","); if (parts.length < 4) continue;
+                    const y = parseInt(parts.replace("年", ""), 10), m = parseInt(parts.replace("月", ""), 10), d = parseInt(parts.replace("日", ""), 10);
+                    let txt = parts.slice(3).join(",").trim(); if (txt.startsWith('"') && txt.endsWith('"')) txt = txt.slice(1, -1);
+                    if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+                        const k = dK(y, m, d); if (!sched[k]) sched[k] = [];
+                        txt.split(" / ").forEach(p=>{ p=p.trim(); if (p && !sched[k].includes(p)) { sched[k].push(p); count++; } });
+                    }
+                }
+                save(); alert("インポート成功！\n" + count + " 件登録しました。"); input.value = ""; draw();
+            };
+            reader.readAsText(file, "UTF-8");
+        }
+        function opM() { document.getElementById('mobile-plan-input').value = ''; document.getElementById('mobile-add-modal').style.display = 'flex'; document.getElementById('mobile-plan-input').focus(); }
+        function clM() { document.getElementById('mobile-add-modal').style.display = 'none'; }
+        function tgS() { const m = document.getElementById('mobile-settings-modal'); m.style.display = m.style.display === 'none' ? 'flex' : 'none'; }
+        function addPM() {
+            const input = document.getElementById('mobile-plan-input'), t = input.value.trim(); if (!t) return;
+            if (!sched[sel]) sched[sel] = []; sched[sel].push(t); save(); input.value = ''; clM(); draw();
+        }
+        window.onload = () => { document.getElementById('pw-input').focus(); };
+    </script>
+</body>
+</html>
