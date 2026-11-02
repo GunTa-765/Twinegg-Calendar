@@ -739,3 +739,22 @@ body {
     border-top: 1px solid #eee;
     padding-top: 10px;
 }
+
+/* ==========================================================================
+   土曜日・日曜日のマスの色設定（追記）
+   ========================================================================== */
+
+/* 土曜日のマスの背景を薄い青色にする場合 */
+.day-cell.day-sat {
+    background-color: #f0f4ff !important;
+}
+
+/* 日曜日のマスの背景を薄い赤色にする場合 */
+.day-cell.day-sun-holiday {
+    background-color: #fff0f0 !important;
+}
+
+/* 💡【補足】もし背景ではなく「日付の枠線」自体を青や赤にしたい場合は、以下のように指定してください
+.day-cell.day-sat { border: 1px solid #0066cc !important; }
+.day-cell.day-sun-holiday { border: 1px solid #ff3b30 !important; }
+*/
