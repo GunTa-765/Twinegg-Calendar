@@ -247,14 +247,22 @@ function draw() {
         const rokuyoClass = rokuyo === "大安" ? "rokuyo-taian" : rokuyo === "仏滅" ? "rokuyo-butsumetsu" : "rokuyo-normal";
         const rokuyoHtml = `<span class="rokuyo ${rokuyoClass}">${rokuyo}</span>`;
 
-        // ★【selected の位置を維持】選択されているマスの青枠クラスを正しく付与します
+        // 日付・祝日・気温を上部にまとめ、予定は専用のコンテナ「plan-container」に入れます
         container.innerHTML += `
             <div class="day-cell ${c} ${selected === k ? 'selected' : ''}" onclick="selectDate('${k}')">
-                <div class="cell-top">
-                    <span style="font-size:20px; font-weight:bold; color:${w === 0 || h ? 'red' : w === 6 ? 'blue' : ''};">${d}</span>
-                    ${rokuyoHtml}
+                <div class="cell-top-wrapper">
+                    <div class="cell-top">
+                        <span style="font-size:20px; font-weight:bold; color:${w === 0 || h ? 'red' : w === 6 ? 'blue' : ''};">${d}</span>
+                        ${rokuyoHtml}
+                    </div>
+                    <div class="meta-info">
+                        ${hHtml}
+                        ${tempHtml(k)}
+                    </div>
                 </div>
-                ${hHtml}${tempHtml(k)}${plansHtml}
+                <div class="plan-container">
+                    ${plansHtml}
+                </div>
             </div>`;
     }
     document.getElementById('side-title').innerText = `${selected} の予定`;
@@ -555,4 +563,134 @@ function addPlanMobile() {
     
     closeMobileAddModal(); // モーダルを閉じる
     render(false);         // カレンダーと下部予定リストをリフレッシュ
+}
+// ==========================================================================
+// 5. Yahooカレンダー風 予定編集モーダル 制御スクリプト
+// ==========================================================================
+
+document.addEventListener('DOMContentLoaded', () => {
+    const openModalBtn = document.getElementById('openModalBtn');
+    const mobileFab = document.getElementById('mobile-fab'); // 既存のスマホ用FABがあれば紐付け
+    const closeModalBtn = document.getElementById('closeModalBtn');
+    const cancelModalBtn = document.getElementById('cancelModalBtn');
+    const modalOverlay = document.getElementById('calendarModalOverlay');
+    const scheduleForm = document.getElementById('scheduleForm');
+    const allDayCheckbox = document.getElementById('allDayCheckbox');
+    const startTimeInput = document.getElementById('startTime');
+    const endTimeInput = document.getElementById('endTime');
+
+    // 終日チェックボックスの切り替え制御
+    allDayCheckbox.addEventListener('change', (e) => {
+        if (e.target.checked) {
+            startTimeInput.type = 'date';
+            endTimeInput.type = 'date';
+            // 現在選択されている日付をマッピング
+            if (selected) {
+                startTimeInput.value = selected;
+                endTimeInput.value = selected;
+            }
+        } else {
+            startTimeInput.type = 'datetime-local';
+            endTimeInput.type = 'datetime-local';
+            initDateTimeFields();
+        }
+    });
+
+    // モーダルを開くときの時間初期化処理
+    function initDateTimeFields() {
+        if (!selected) return;
+        
+        // グローバル変数 "selected" (YYYY-M-D) から分解
+        const [y, m, d] = selected.split('-').map(Number);
+        const padStr = (num) => String(num).padStart(2, '0');
+        
+        if (allDayCheckbox.checked) {
+            const dateStr = `${y}-${padStr(m)}-${padStr(d)}`;
+            startTimeInput.value = dateStr;
+            endTimeInput.value = dateStr;
+        } else {
+            // デフォルトは選択日の 10:00 〜 11:00 に設定
+            const baseStr = `${y}-${padStr(m)}-${padStr(d)}`;
+            startTimeInput.value = `${baseStr}T10:00`;
+            endTimeInput.value = `${baseStr}T11:00`;
+        }
+    }
+
+    // モーダルを開く関数
+    const openModal = () => {
+        allDayCheckbox.checked = false;
+        startTimeInput.type = 'datetime-local';
+        endTimeInput.type = 'datetime-local';
+        initDateTimeFields();
+        modalOverlay.style.display = 'flex';
+    };
+
+    // モーダルを閉じる関数
+    const closeModal = () => {
+        modalOverlay.style.display = 'none';
+        scheduleForm.reset();
+    };
+
+    // イベントリスナーの登録
+    if (openModalBtn) openModalBtn.addEventListener('click', openModal);
+    if (mobileFab) mobileFab.addEventListener('click', openModal); // スマホ用FABでも同じモーダルを開く
+    
+    if (closeModalBtn) closeModalBtn.addEventListener('click', closeModal);
+    if (cancelModalBtn) cancelModalBtn.addEventListener('click', closeModal);
+    
+    modalOverlay.addEventListener('click', (e) => {
+        if (e.target === modalOverlay) closeModal();
+    });
+
+    // フォーム送信（保存）時のアクション
+    scheduleForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+
+        const title = document.getElementById('scheduleTitle').value.trim();
+        const start = startTimeInput.value;
+        const end = endTimeInput.value;
+        const isAllDay = allDayCheckbox.checked;
+        const location = document.getElementById('scheduleLocation').value.trim();
+        const desc = document.getElementById('scheduleDescription').value.trim();
+
+        if (!title) return;
+
+        // Yahooカレンダー風に、入力された項目を1つの見やすい文字列に整形
+        let planText = "";
+        
+        if (isAllDay) {
+            planText += "[終日] ";
+        } else {
+            const startTimePart = start.split('T')[1] || "";
+            const endTimePart = end.split('T')[1] || "";
+            if (startTimePart) planText += `[${startTimePart}～${endTimePart}] `;
+        }
+
+        planText += title;
+        if (location) planText += ` @${location}`;
+        if (desc) planText += ` (${desc})`;
+
+        // 既存のグローバルオブジェクト schedules[selected] へのデータ挿入ロジックを流用
+        if (!schedules[selected]) schedules[selected] = [];
+        schedules[selected].push(planText);
+
+        // ローカルストレージに保存 (既存の STORAGE_KEY を使用)
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(schedules));
+
+        // カレンダー画面の再描画関数を呼び出し
+        if (typeof render === 'function') {
+            render(false);
+        }
+
+        closeModal();
+    });
+});
+
+// 既存のスマホ用追加関数をオーバーライド（バグ防止・共通化）
+function openMobileAddModal() {
+    const overlay = document.getElementById('calendarModalOverlay');
+    if (overlay) {
+        // PC/スマホ共通でリッチな編集モーダルを開くように変更します
+        document.getElementById('openModalBtn').click();
+    }
 }
