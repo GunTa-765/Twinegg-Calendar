@@ -22,17 +22,91 @@ body {
 .text-sun { color: red; }
 .text-sat { color: blue; }
 
-/* 予定アイテム */
-.plan-item {
+/* ==========================================================================
+   日付マスのレイアウト修正 ＆ 予定の青白交互カラー（確定版）
+   ========================================================================== */
+
+/* 日付セルの構造を上部（日付・気温・祝日）と下部（予定）に分ける */
+.day-cell {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: stretch;
+    box-sizing: border-box;
+}
+
+/* 日付、六曜、祝日、気温をまとめるエリア */
+.cell-top-wrapper {
+    width: 100%;
+    margin-bottom: 4px;
+    flex-shrink: 0; /* 高さを潰さない */
+}
+
+/* 祝日名と気温を横並び、またはスマートに配置するエリア */
+.meta-info {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    width: 100%;
+}
+
+/* 祝日の文字がはみ出さないように調整 */
+.holiday-name {
     font-size: 11px;
-    background: #0066cc;
-    color: white;
-    padding: 2px 4px;
+    font-weight: bold;
+    color: #ff3b30;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin: 0;
+}
+
+/* 気温の表示位置を固定 */
+.temp-wrap {
+    display: flex;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: bold;
+    margin: 0;
+    padding: 0;
+}
+
+/* 予定だけが収まる専用の箱 */
+.plan-container {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 2px; /* 予定同士のすき間 */
+    flex-grow: 1; /* 余った縦幅をすべて予定エリアにする */
+    overflow: hidden;
+}
+
+/* 予定アイテムの共通ベース */
+.plan-container .plan-item {
+    font-size: 11px;
+    padding: 3px 5px;
     border-radius: 3px;
-    margin-top: 2px;
     text-overflow: ellipsis;
     overflow: hidden;
     white-space: nowrap;
+    box-sizing: border-box;
+    display: block;
+    margin: 0; /* gapで制御するため余計なmarginを排除 */
+}
+
+/* どのマスでも【必ず1個目の予定から】交互に色替えする設定 */
+/* 1個目、3個目、5個目…（奇数：青背景に白文字） */
+.plan-container .plan-item:nth-child(odd) {
+    background-color: #0066cc !important;
+    color: #ffffff !important;
+    border: 1px solid #0066cc !important;
+}
+
+/* 2個目、4個目、6個目…（偶数：白背景に青文字・青枠） */
+.plan-container .plan-item:nth-child(even) {
+    background-color: #ffffff !important;
+    color: #0066cc !important;
+    border: 1px solid #0066cc !important;
 }
 
 /* ボタンの共通設定 */
@@ -216,11 +290,14 @@ body {
     .weeks-grid {
         display: grid;
         grid-template-columns: repeat(7, 1fr);
-        grid-template-rows: repeat(6, 1fr);
+        grid-auto-rows: minmax(130px, auto); /* 1マス最低130pxの高さを持たせる */
         gap: 4px;
         flex: 1;
         width: 100%;
-        height: 100%;
+    }
+    /* カレンダー全体が縦に伸びるため、親ボックスをスクロール可能にします */
+    .calendar-box {
+        overflow-y: auto !important; 
     }
     .day-cell {
         height: 100%;
@@ -304,13 +381,12 @@ body {
     .weeks-grid {
         display: grid;
         grid-template-columns: repeat(7, 1fr);
-        /* スマホでは縦幅を画面に縛らず、等幅（高さ65px等）で下に伸ばす */
-        grid-auto-rows: minmax(65px, auto);
+        grid-auto-rows: minmax(100px, auto); /* 100pxに拡大 */
         gap: 2px;
         width: 100%;
     }
     .day-cell {
-        min-height: 65px;
+        min-height: 100px; /* 100pxに拡大 */
         border: 1px solid #e5e7eb;
         padding: 4px;
         cursor: pointer;
@@ -321,7 +397,7 @@ body {
         background: white;
     }
     .empty-cell {
-        min-height: 65px;
+        min-height: 100px; /* 100pxに拡大 */
         background: #f9fafb;
         border: 1px solid #f3f4f6;
         box-sizing: border-box;
@@ -459,4 +535,207 @@ body {
 }
 .day-cell.selected:not(.day-today) .cell-top span {
     color: #0066cc !important;            /* 他のマスを選択したときは文字を青に */
+}
+/* ==========================================================================
+   4. Yahooカレンダー風 予定編集モーダル スタイル
+   ========================================================================== */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(0, 0, 0, 0.4);
+    z-index: 2000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.calendar-modal {
+    background-color: #ffffff;
+    width: 90%;
+    max-width: 460px;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+    padding: 20px;
+    box-sizing: border-box;
+    animation: modalFadeIn 0.2s ease-out;
+}
+
+@keyframes modalFadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #e5e7eb;
+    padding-bottom: 10px;
+    margin-bottom: 15px;
+}
+
+.modal-title {
+    font-size: 16px;
+    font-weight: bold;
+    margin: 0;
+    color: #333;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #9aa0a6;
+    line-height: 1;
+}
+.close-btn:hover { color: #5f6368; }
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+.form-group label {
+    display: block;
+    font-size: 13px;
+    color: #4c4c4c;
+    margin-bottom: 6px;
+    font-weight: bold;
+}
+
+.form-control {
+    width: 100%;
+    padding: 8px 12px;
+    box-sizing: border-box;
+    border: 1px solid #dadce0;
+    border-radius: 4px;
+    font-size: 14px;
+    outline: none;
+}
+.form-control:focus {
+    border-color: #0066cc;
+}
+
+.time-range {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.time-range input {
+    flex: 1;
+}
+
+.checkbox-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    border-top: 1px solid #e5e7eb;
+    padding-top: 15px;
+    margin-top: 20px;
+}
+
+.btn-submit {
+    background-color: #0066cc;
+    color: white;
+    border: none;
+    padding: 8px 20px;
+    font-weight: bold;
+}
+.btn-submit:hover { background-color: #0052a3; }
+
+.btn-cancel {
+    background-color: #fff;
+    color: #5f6368;
+    border: 1px solid #dadce0;
+    padding: 8px 16px;
+}
+.btn-cancel:hover { background-color: #f8f9fa; }
+
+/* スマホ用の微調整 */
+@media screen and (max-width: 768px) {
+    .calendar-modal {
+        padding: 15px;
+    }
+    .time-range {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 5px;
+    }
+    .time-range span {
+        display: none; /* スマホ時は「～」を非表示にして縦に並べる */
+    }
+}
+/* ==========================================================================
+   5. Yahooカレンダー風 年月選択ポップアップ（ジャンプ機能）
+   ========================================================================== */
+.calendar-box {
+    position: relative; /* ポップアップの基準点にするため追記 */
+}
+
+.ym-picker-box {
+    position: absolute;
+    top: 60px; /* タイトルの下付近に表示（ヘッダーの高さに合わせて調整してください） */
+    left: 50%;
+    transform: translateX(-50%);
+    width: 280px;
+    background: #ffffff;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+    padding: 15px;
+    z-index: 1500;
+    font-family: sans-serif;
+}
+
+.ym-picker-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.picker-year-text {
+    font-size: 16px;
+    font-weight: bold;
+    color: #333;
+}
+
+.ym-picker-months {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-bottom: 15px;
+}
+
+.month-btn {
+    padding: 8px 0;
+    border: 1px solid #e5e7eb;
+    background: #f9fafb;
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+    text-align: center;
+    color: #333;
+}
+.month-btn:hover {
+    background: #0066cc;
+    color: white;
+    border-color: #0066cc;
+}
+
+.ym-picker-footer {
+    display: flex;
+    justify-content: center;
+    border-top: 1px solid #eee;
+    padding-top: 10px;
 }
