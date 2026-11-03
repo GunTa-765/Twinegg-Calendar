@@ -706,6 +706,9 @@ function renderList() {
           `).join('');
 }
 // --- script.js の一番下にそのまま追記してください ---
+// ==========================================================================
+// スマホ・PC共通 確定版：予定編集・日時移動スクリプト
+// ==========================================================================
 
 let editingPlanIndex = null; // 現在編集中の予定の番号（nullの場合は新規追加）
 
@@ -744,8 +747,8 @@ function openEditModal(index) {
     } else if (text.startsWith("[")) {
         const timeMatch = text.match(/^\[(.*?)～(.*?)\]/);
         if (timeMatch) {
-            startTimePart = timeMatch[1].trim();
-            endTimePart = timeMatch[2].trim();
+            startTimePart = timeMatch[1] ? timeMatch[1].trim() : "";
+            endTimePart = timeMatch[2] ? timeMatch[2].trim() : "";
             text = text.replace(timeMatch[0], "").trim();
         }
     }
@@ -754,12 +757,10 @@ function openEditModal(index) {
     let location = "";
     if (text.includes(" @")) {
         const parts = text.split(" @");
-        // 後ろからパース
         const locDescPart = parts.pop(); 
         location = locDescPart.split(" (")[0].trim();
         text = parts.join(" @").trim();
         
-        // もし場所の後に説明（）が続いていた場合の復元用バッファ
         if (locDescPart.includes(" (")) {
             text += " (" + locDescPart.split(" (").slice(1).join(" (");
         }
@@ -777,27 +778,29 @@ function openEditModal(index) {
     let title = text;
 
     // --- モーダルの各入力欄に値をセット ---
-    titleInput.value = title;
-    allDayCheckbox.checked = isAllDay;
+    if (titleInput) titleInput.value = title;
+    if (allDayCheckbox) allDayCheckbox.checked = isAllDay;
     
     const [y, m, d] = selected.split('-').map(Number);
     const padStr = (num) => String(num).padStart(2, '0');
     const baseDateStr = `${y}-${padStr(m)}-${padStr(d)}`;
 
-    if (isAllDay) {
-        startTimeInput.type = 'date';
-        endTimeInput.type = 'date';
-        startTimeInput.value = baseDateStr;
-        endTimeInput.value = baseDateStr;
-    } else {
-        startTimeInput.type = 'datetime-local';
-        endTimeInput.type = 'datetime-local';
-        startTimeInput.value = startTimePart ? `${baseDateStr}T${startTimePart}` : `${baseDateStr}T10:00`;
-        endTimeInput.value = endTimePart ? `${baseDateStr}T${endTimePart}` : `${baseDateStr}T11:00`;
+    if (startTimeInput && endTimeInput) {
+        if (isAllDay) {
+            startTimeInput.type = 'date';
+            endTimeInput.type = 'date';
+            startTimeInput.value = baseDateStr;
+            endTimeInput.value = baseDateStr;
+        } else {
+            startTimeInput.type = 'datetime-local';
+            endTimeInput.type = 'datetime-local';
+            startTimeInput.value = startTimePart ? `${baseDateStr}T${startTimePart}` : `${baseDateStr}T10:00`;
+            endTimeInput.value = endTimePart ? `${baseDateStr}T${endTimePart}` : `${baseDateStr}T11:00`;
+        }
     }
 
-    locationInput.value = location;
-    descInput.value = desc;
+    if (locationInput) locationInput.value = location;
+    if (descInput) descInput.value = desc;
 
     // モーダルのタイトルを「予定の編集」に変更
     const modalTitle = overlay.querySelector('.modal-title');
@@ -808,7 +811,7 @@ function openEditModal(index) {
 }
 
 /**
- * 既存の登録ボタン（新規追加）を押したときは編集インデックスをリセットする
+ * 登録ボタン（新規追加）を押したときは編集モードをリセットする
  */
 document.addEventListener('DOMContentLoaded', () => {
     const openModalBtn = document.getElementById('openModalBtn');
@@ -827,112 +830,122 @@ document.addEventListener('DOMContentLoaded', () => {
     if (openModalBtn) openModalBtn.addEventListener('click', resetToNew);
     if (mobileFab) mobileFab.addEventListener('click', resetToNew);
 
-    // フォーム送信（保存ボタン）ロジックの上書き・拡張
-if (scheduleForm) {
-    scheduleForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        
-        const titleInput = document.getElementById('scheduleTitle');
-        const startTimeInput = document.getElementById('startTime');
-        const endTimeInput = document.getElementById('endTime');
-        const allDayCheckbox = document.getElementById('allDayCheckbox');
-        const locationInput = document.getElementById('scheduleLocation');
-        const descInput = document.getElementById('scheduleDescription');
+    // フォーム送信（保存ボタン）ロジックの完全確定版
+    if (scheduleForm) {
+        // 既存のイベントリスナーによる競合を防ぐため、一度cloneしてイベントをクリアするか、最優先で実行させます
+        scheduleForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            e.stopPropagation(); // スマホの重複イベントをカット
+            
+            const titleInput = document.getElementById('scheduleTitle');
+            const startTimeInput = document.getElementById('startTime');
+            const endTimeInput = document.getElementById('endTime');
+            const allDayCheckbox = document.getElementById('allDayCheckbox');
+            const locationInput = document.getElementById('scheduleLocation');
+            const descInput = document.getElementById('scheduleDescription');
 
-        const title = titleInput ? titleInput.value.trim() : "";
-        if (!title) return;
+            const title = titleInput ? titleInput.value.trim() : "";
+            if (!title) return;
 
-        const start = startTimeInput ? startTimeInput.value : "";
-        const end = endTimeInput ? endTimeInput.value : "";
-        const isAllDay = allDayCheckbox ? allDayCheckbox.checked : false;
-        const location = locationInput ? locationInput.value.trim() : "";
-        const desc = descInput ? descInput.value.trim() : "";
+            const start = startTimeInput ? startTimeInput.value : "";
+            const end = endTimeInput ? endTimeInput.value : "";
+            const isAllDay = allDayCheckbox ? allDayCheckbox.checked : false;
+            const location = locationInput ? locationInput.value.trim() : "";
+            const desc = descInput ? descInput.value.trim() : "";
 
-        // 1. 入力された日時から「保存先の日付（YYYY-M-D形式）」を安全に割り出す
-        let targetDateKey = selected; 
-        if (start) {
-            // T で分割して必ず [0] 番目の日付部分（YYYY-MM-DD）を取得する（スマホバグ対策）
-            const datePart = start.split('T')[0]; 
-            if (datePart) {
-                const parts = datePart.split('-');
-                const y = parseInt(parts[0], 10);
-                const m = parseInt(parts[1], 10);
-                const d = parseInt(parts[2], 10);
-                if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
-                    targetDateKey = `${y}-${m}-${d}`; // カレンダーアプリの共通キー形式
-                }
-            }
-        }
-
-        // 2. Yahooカレンダー風のテキスト整形
-        let planText = "";
-        if (isAllDay) {
-            planText += "[終日] ";
-        } else {
-            // スマホやブラウザごとの時刻文字列を安全に取得
-            const startTimePart = start.includes('T') ? start.split('T')[1] : "";
-            const endTimePart = end.includes('T') ? end.split('T')[1] : "";
-            if (startTimePart) {
-                // 秒数が含まれる場合は削って hh:mm にする
-                const sTime = startTimePart.substring(0, 5);
-                const eTime = endTimePart ? endTimePart.substring(0, 5) : "";
-                planText += `[${sTime}～${eTime}] `;
-            }
-        }
-        planText += title;
-        if (location) planText += ` @${location}`;
-        if (desc) planText += ` (${desc})`;
-
-        // 3. データの保存・移動処理
-        if (editingPlanIndex !== null) {
-            // 【編集モード】
-            if (targetDateKey === selected) {
-                // 日付が変わっていない場合は通常の上書き
-                if (!schedules[selected]) schedules[selected] = [];
-                schedules[selected][editingPlanIndex] = planText;
-            } else {
-                // 日付が変更された場合：元の予定を削除し、新しい日付に移動
-                if (schedules[selected]) {
-                    schedules[selected].splice(editingPlanIndex, 1);
-                    if (schedules[selected].length === 0) {
-                        delete schedules[selected];
+            // 1. 入力された日時から「保存先の日付（YYYY-M-D形式）」を厳密に抽出
+            let targetDateKey = selected; 
+            if (start) {
+                const datePart = start.split('T')[0]; // 必ずインデックス[0]を取得
+                if (datePart) {
+                    const parts = datePart.split('-');
+                    const y = parseInt(parts[0], 10);
+                    const m = parseInt(parts[1], 10);
+                    const d = parseInt(parts[2], 10);
+                    if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+                        targetDateKey = `${y}-${m}-${d}`;
                     }
                 }
-                // 変更先の日付に追加
+            }
+
+            // 2. Yahooカレンダー風のテキスト整形
+            let planText = "";
+            if (isAllDay) {
+                planText += "[終日] ";
+            } else {
+                const startTimePart = start.includes('T') ? start.split('T')[1] : "";
+                const endTimePart = end.includes('T') ? end.split('T')[1] : "";
+                if (startTimePart) {
+                    const sTime = startTimePart.substring(0, 5);
+                    const eTime = endTimePart ? endTimePart.substring(0, 5) : "";
+                    planText += `[${sTime}～${eTime}] `;
+                }
+            }
+            planText += title;
+            if (location) planText += ` @${location}`;
+            if (desc) planText += ` (${desc})`;
+
+            // 3. データの保存・移動処理
+            if (editingPlanIndex !== null) {
+                // 【編集モード】
+                if (targetDateKey === selected) {
+                    // 日付が変わっていない場合は通常の上書き
+                    if (!schedules[selected]) schedules[selected] = [];
+                    schedules[selected][editingPlanIndex] = planText;
+                } else {
+                    // 日付が変更された場合：元の予定を削除し、新しい日付に移動
+                    if (schedules[selected] && schedules[selected][editingPlanIndex] !== undefined) {
+                        schedules[selected].splice(editingPlanIndex, 1);
+                        if (schedules[selected].length === 0) {
+                            delete schedules[selected];
+                        }
+                    }
+                    // 変更先の日付に追加
+                    if (!schedules[targetDateKey]) schedules[targetDateKey] = [];
+                    schedules[targetDateKey].push(planText);
+                    
+                    // 画面の選択状態も変更先の日付に合わせる
+                    selected = targetDateKey; 
+                    const [targetY, targetM] = targetDateKey.split('-').map(Number);
+                    cur.setFullYear(targetY);
+                    cur.setMonth(targetM - 1);
+                }
+            } else {
+                // 【新規追加モード】
                 if (!schedules[targetDateKey]) schedules[targetDateKey] = [];
                 schedules[targetDateKey].push(planText);
                 
-                // 画面の選択状態も変更先の日付に合わせる
-                selected = targetDateKey; 
+                selected = targetDateKey;
                 const [targetY, targetM] = targetDateKey.split('-').map(Number);
                 cur.setFullYear(targetY);
                 cur.setMonth(targetM - 1);
             }
-        } else {
-            // 【新規追加モード】指定された日付のマスに追加
-            if (!schedules[targetDateKey]) schedules[targetDateKey] = [];
-            schedules[targetDateKey].push(planText);
+
+            // ローカルストレージに確定保存
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(schedules));
             
-            // 新規追加時も追加先の日付に画面を合わせる
-            selected = targetDateKey;
-            const [targetY, targetM] = targetDateKey.split('-').map(Number);
-            cur.setFullYear(targetY);
-            cur.setMonth(targetM - 1);
-        }
-
-        // ローカルストレージに確定保存
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(schedules));
-        
-        // モーダルを閉じる
-        const overlay = document.getElementById('calendarModalOverlay');
-        if (overlay) overlay.style.display = 'none';
-        if (scheduleForm) scheduleForm.reset();
-        
-        // カレンダー画面を強制的にリフレッシュ（trueにすることで月をまたぐ移動も即時描画されます）
-        if (typeof render === 'function') {
-            render(true);
-        }
-    }, { capture: true });
-}
-
+            // モーダルを閉じてリセット
+            const overlay = document.getElementById('calendarModalOverlay');
+            if (overlay) overlay.style.display = 'none';
+            if (scheduleForm) scheduleForm.reset();
+            
+            // カレンダーリフレッシュ
+            if (typeof render === 'function') {
+                render(true);
+            }
+        }, { capture: true });
+    }
 });
+
+// 旧スマホ用関数のオーバーライド（干渉・バグを完全に停止させる）
+function openMobileAddModal() {
+    editingPlanIndex = null;
+    const overlay = document.getElementById('calendarModalOverlay');
+    if (overlay) {
+        const modalTitle = overlay.querySelector('.modal-title');
+        if (modalTitle) modalTitle.innerText = "新しい予定を追加";
+        overlay.style.display = 'flex';
+    }
+}
+function addPlanMobile() {} // 完全に無効化
+
