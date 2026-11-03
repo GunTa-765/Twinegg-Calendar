@@ -759,3 +759,14 @@ body {
 .day-cell.day-sat { border: 1px solid #0066cc !important; }
 .day-cell.day-sun-holiday { border: 1px solid #ff3b30 !important; }
 */
+/* 今日の日付を黒い太丸で囲む（スクショの20日の再現） */
+.day-today-circle {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    border: 2px solid #000000;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    font-weight: bold !important;
+}
