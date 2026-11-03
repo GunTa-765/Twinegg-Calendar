@@ -9,6 +9,34 @@
 <body>
 	<div class="container">
     <!-- カレンダーエリア -->
+
+	<!-- Yahooカレンダー風 年月ジャンプポップアップ -->
+	<div id="ym-picker" class="ym-picker-box" style="display: none;">
+	        <div class="ym-picker-header">
+	            <button type="button" class="btn" onclick="changePickerYear(-1)">◀</button>
+	            <span id="picker-year-title" class="picker-year-text">2026年</span>
+	            <button type="button" class="btn" onclick="changePickerYear(1)">▶</button>
+	        </div>
+	        <div class="ym-picker-months">
+	            <!-- 1月〜12月のボタンをループの代わりに直書き -->
+	            <button type="button" class="month-btn" onclick="selectPickerMonth(1)">1月</button>
+	            <button type="button" class="month-btn" onclick="selectPickerMonth(2)">2月</button>
+	            <button type="button" class="month-btn" onclick="selectPickerMonth(3)">3月</button>
+	            <button type="button" class="month-btn" onclick="selectPickerMonth(4)">4月</button>
+	            <button type="button" class="month-btn" onclick="selectPickerMonth(5)">5月</button>
+	            <button type="button" class="month-btn" onclick="selectPickerMonth(6)">6月</button>
+	            <button type="button" class="month-btn" onclick="selectPickerMonth(7)">7月</button>
+	            <button type="button" class="month-btn" onclick="selectPickerMonth(8)">8月</button>
+	            <button type="button" class="month-btn" onclick="selectPickerMonth(9)">9月</button>
+	            <button type="button" class="month-btn" onclick="selectPickerMonth(10)">10月</button>
+	            <button type="button" class="month-btn" onclick="selectPickerMonth(11)">11月</button>
+	            <button type="button" class="month-btn" onclick="selectPickerMonth(12)">12月</button>
+	        </div>
+	        <div class="ym-picker-footer">
+	            <button type="button" class="btn" onclick="toggleYearMonthPicker()">キャンセル</button>
+	        </div>
+	</div>
+
 	    <div class="calendar-box">
 	        <div class="header">
 	            <div class="header-left"></div>
@@ -18,32 +46,7 @@
 	                <h2 id="calendar-title" class="calendar-title" onclick="toggleYearMonthPicker()" style="cursor: pointer; user-select: none;"></h2>
 	                <button class="btn" onclick="changeMonth(1)">▶</button>
 
-	                <!-- Yahooカレンダー風 年月ジャンプポップアップ -->
-	                <div id="ym-picker" class="ym-picker-box" style="display: none;">
-	                    <div class="ym-picker-header">
-	                        <button type="button" class="btn" onclick="changePickerYear(-1)">◀</button>
-	                        <span id="picker-year-title" class="picker-year-text">2026年</span>
-	                        <button type="button" class="btn" onclick="changePickerYear(1)">▶</button>
-	                    </div>
-	                    <div class="ym-picker-months">
-	                        <!-- 1月〜12月のボタンをループの代わりに直書き -->
-	                        <button type="button" class="month-btn" onclick="selectPickerMonth(1)">1月</button>
-	                        <button type="button" class="month-btn" onclick="selectPickerMonth(2)">2月</button>
-	                        <button type="button" class="month-btn" onclick="selectPickerMonth(3)">3月</button>
-	                        <button type="button" class="month-btn" onclick="selectPickerMonth(4)">4月</button>
-	                        <button type="button" class="month-btn" onclick="selectPickerMonth(5)">5月</button>
-	                        <button type="button" class="month-btn" onclick="selectPickerMonth(6)">6月</button>
-	                        <button type="button" class="month-btn" onclick="selectPickerMonth(7)">7月</button>
-	                        <button type="button" class="month-btn" onclick="selectPickerMonth(8)">8月</button>
-	                        <button type="button" class="month-btn" onclick="selectPickerMonth(9)">9月</button>
-	                        <button type="button" class="month-btn" onclick="selectPickerMonth(10)">10月</button>
-	                        <button type="button" class="month-btn" onclick="selectPickerMonth(11)">11月</button>
-	                        <button type="button" class="month-btn" onclick="selectPickerMonth(12)">12月</button>
-	                    </div>
-	                    <div class="ym-picker-footer">
-	                        <button type="button" class="btn" onclick="toggleYearMonthPicker()">キャンセル</button>
-	                    </div>
-	                </div>
+
 
 	            </div>
 	            <div class="header-right">
