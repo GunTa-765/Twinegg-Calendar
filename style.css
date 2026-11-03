@@ -707,25 +707,26 @@ body {
     }
 }
 /* ==========================================================================
-   5. Yahooカレンダー風 年月選択ポップアップ（ジャンプ機能）
+   5. Yahooカレンダー風 年月選択ポップアップ（ジャンプ機能）最前面・中央配置化
    ========================================================================== */
 .calendar-box {
     position: relative; /* ポップアップの基準点にするため追記 */
 }
 
 .ym-picker-box {
-    position: absolute;
-    top: 60px; /* タイトルの下付近に表示（ヘッダーの高さに合わせて調整してください） */
+    position: fixed; /* absolute から fixed に変更して最前面へ */
+    top: 100px;      /* 画面上部からの位置（ヘッダーが見える位置に調整） */
     left: 50%;
     transform: translateX(-50%);
     width: 280px;
     background: #ffffff;
     border: 1px solid #ccc;
     border-radius: 8px;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3); /* 浮遊感を出すため影を強めに */
     padding: 15px;
-    z-index: 1500;
+    z-index: 99999 !important; /* 日付マスの z-index に絶対負けない超高数値 */
     font-family: sans-serif;
+    box-sizing: border-box;
 }
 
 .ym-picker-header {
