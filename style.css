@@ -82,31 +82,28 @@ body {
 }
 
 /* 予定アイテムの共通ベース */
+/* 既存の交互色設定（nth-child(odd)/(even)）を削除し、以下に差し替え */
+
 .plan-container .plan-item {
-    font-size: 11px;
-    padding: 3px 5px;
-    border-radius: 3px;
-    text-overflow: ellipsis;
-    overflow: hidden;
+    font-size: 9px; /* スマホで見やすい極小サイズ */
+    padding: 1px 2px;
+    border-radius: 2px;
     white-space: nowrap;
-    box-sizing: border-box;
-    display: block;
-    margin: 0; /* gapで制御するため余計なmarginを排除 */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    border: none !important; /* 枠線を消す */
+    color: #333333 !important; /* 文字色は基本濃いグレー */
 }
 
-/* どのマスでも【必ず1個目の予定から】交互に色替えする設定 */
-/* 1個目、3個目、5個目…（奇数：青背景に白文字） */
-.plan-container .plan-item:nth-child(odd) {
-    background-color: #0066cc !important;
-    color: #ffffff !important;
-    border: 1px solid #0066cc !important;
-}
+/* 予定のタイトル部分に含まれるキーワードに応じて自動でパステルカラーを適用する例 */
+.plan-item[data-type="まん"] { background-color: #cce0ff !important; color: #0033cc !important; }
+.plan-item[data-type="廃品"] { background-color: #ffcccc !important; color: #cc0000 !important; }
+.plan-item[data-type="宅急"] { background-color: #fff5cc !important; color: #996600 !important; }
+.plan-item[data-type="不燃"] { background-color: #ccfffa !important; color: #008877 !important; }
 
-/* 2個目、4個目、6個目…（偶数：白背景に青文字・青枠） */
-.plan-container .plan-item:nth-child(even) {
-    background-color: #ffffff !important;
-    color: #0066cc !important;
-    border: 1px solid #0066cc !important;
 }
 
 /* ボタンの共通設定 */
@@ -378,29 +375,33 @@ body {
         padding-bottom: 6px;
         margin-bottom: 6px;
     }
+@media screen and (max-width: 768px) {
+    /* マス目の高さと自動縮小の調整 */
     .weeks-grid {
         display: grid;
         grid-template-columns: repeat(7, 1fr);
-        grid-auto-rows: minmax(100px, auto); /* 100pxに拡大 */
-        gap: 2px;
+        grid-auto-rows: minmax(50px, 1fr); /* 100pxから50pxに縮小し、画面に収まりやすく */
+        gap: 0px; /* 隙間をなくして綺麗な格子状に */
         width: 100%;
     }
+    
     .day-cell {
-        min-height: 100px; /* 100pxに拡大 */
-        border: 1px solid #e5e7eb;
-        padding: 4px;
-        cursor: pointer;
-        display: flex;
-        flex-direction: column;
-        box-sizing: border-box;
-        overflow: hidden;
-        background: white;
+        min-height: 50px; /* 100pxから50pxへ */
+        border: 0.5px solid #e0e0e0; /* 細いグレーの枠線に */
+        padding: 2px;
+        /* 背景色の強制上書きを解除し、スクショのような白ベースに */
+        background: white !important; 
     }
+    
     .empty-cell {
-        min-height: 100px; /* 100pxに拡大 */
-        background: #f9fafb;
-        border: 1px solid #f3f4f6;
-        box-sizing: border-box;
+        min-height: 50px;
+        border: 0.5px solid #e0e0e0;
+        background: #fafafa;
+    }
+
+    /* 土日の背景色自動設定をスマホでは無効化（スクショ通り白ベースに） */
+    .day-cell.day-sat, .day-cell.day-sun-holiday {
+        background-color: white !important;
     }
     
     /* スマホでは日付数字を14pxにして視認性を確保 */
@@ -754,7 +755,7 @@ body {
     background-color: #fff0f0 !important;
 }
 
-/* 💡【補足】もし背景ではなく「日付の枠線」自体を青や赤にしたい場合は、以下のように指定してください
+/* ����【補足】もし背景ではなく「日付の枠線」自体を青や赤にしたい場合は、以下のように指定してください
 .day-cell.day-sat { border: 1px solid #0066cc !important; }
 .day-cell.day-sun-holiday { border: 1px solid #ff3b30 !important; }
 */
