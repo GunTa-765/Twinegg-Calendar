@@ -248,19 +248,16 @@ function draw() {
         const rokuyoHtml = `<span class="rokuyo ${rokuyoClass}">${rokuyo}</span>`;
 
         // 日付・祝日・気温を上部にまとめ、予定は専用のコンテナ「plan-container」に入れます
-        // script.js の draw() 関数内のセル生成部分を以下のように調整
-
-        // 今日の日付（10月20日）の丸囲み判定用クラス
-        let todayCircleClass = "";
-        if (k === todayKey) {
-            todayCircleClass = "day-today-circle"; 
-        }
-
         container.innerHTML += `
             <div class="day-cell ${c} ${selected === k ? 'selected' : ''}" onclick="selectDate('${k}')">
                 <div class="cell-top-wrapper">
-                    <div class="cell-top" style="justify-content: flex-start; gap: 4px;">
-                        <span class="${todayCircleClass}" style="font-size:12px; font-weight:normal; color:${w === 0 || h ? '#ff3b30' : w === 6 ? '#0066cc' : '#333'};">${d}</span>
+                    <div class="cell-top">
+                        <span style="font-size:20px; font-weight:bold; color:${w === 0 || h ? 'red' : w === 6 ? 'blue' : ''};">${d}</span>
+                        ${rokuyoHtml}
+                    </div>
+                    <div class="meta-info">
+                        ${hHtml}
+                        ${tempHtml(k)}
                     </div>
                 </div>
                 <div class="plan-container">
