@@ -831,23 +831,36 @@ document.addEventListener('DOMContentLoaded', () => {
 if (scheduleForm) {
     scheduleForm.addEventListener('submit', (e) => {
         e.preventDefault();
-        const title = document.getElementById('scheduleTitle').value.trim();
+        
+        const titleInput = document.getElementById('scheduleTitle');
+        const startTimeInput = document.getElementById('startTime');
+        const endTimeInput = document.getElementById('endTime');
+        const allDayCheckbox = document.getElementById('allDayCheckbox');
+        const locationInput = document.getElementById('scheduleLocation');
+        const descInput = document.getElementById('scheduleDescription');
+
+        const title = titleInput ? titleInput.value.trim() : "";
         if (!title) return;
 
-        const start = document.getElementById('startTime').value;
-        const end = document.getElementById('endTime').value;
-        const isAllDay = document.getElementById('allDayCheckbox').checked;
-        const location = document.getElementById('scheduleLocation').value.trim();
-        const desc = document.getElementById('scheduleDescription').value.trim();
+        const start = startTimeInput ? startTimeInput.value : "";
+        const end = endTimeInput ? endTimeInput.value : "";
+        const isAllDay = allDayCheckbox ? allDayCheckbox.checked : false;
+        const location = locationInput ? locationInput.value.trim() : "";
+        const desc = descInput ? descInput.value.trim() : "";
 
-        // 1. 入力された日時から「保存先の日付（YYYY-M-D形式）」を割り出す
-        let targetDateKey = selected; // デフォルトは現在の選択日
+        // 1. 入力された日時から「保存先の日付（YYYY-M-D形式）」を安全に割り出す
+        let targetDateKey = selected; 
         if (start) {
-            // YYYY-MM-DD もしくは YYYY-MM-DDT00:00 から日付部分だけを取得
+            // T で分割して必ず [0] 番目の日付部分（YYYY-MM-DD）を取得する（スマホバグ対策）
             const datePart = start.split('T')[0]; 
-            const [y, m, d] = datePart.split('-').map(Number);
-            if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
-                targetDateKey = `${y}-${m}-${d}`; // アプリ仕様のキー形式 (1桁はパディングなし)
+            if (datePart) {
+                const parts = datePart.split('-');
+                const y = parseInt(parts[0], 10);
+                const m = parseInt(parts[1], 10);
+                const d = parseInt(parts[2], 10);
+                if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+                    targetDateKey = `${y}-${m}-${d}`; // カレンダーアプリの共通キー形式
+                }
             }
         }
 
@@ -856,9 +869,15 @@ if (scheduleForm) {
         if (isAllDay) {
             planText += "[終日] ";
         } else {
-            const startTimePart = start.split('T')[1] || "";
-            const endTimePart = end.split('T')[1] || "";
-            if (startTimePart) planText += `[${startTimePart}～${endTimePart}] `;
+            // スマホやブラウザごとの時刻文字列を安全に取得
+            const startTimePart = start.includes('T') ? start.split('T')[1] : "";
+            const endTimePart = end.includes('T') ? end.split('T')[1] : "";
+            if (startTimePart) {
+                // 秒数が含まれる場合は削って hh:mm にする
+                const sTime = startTimePart.substring(0, 5);
+                const eTime = endTimePart ? endTimePart.substring(0, 5) : "";
+                planText += `[${sTime}～${eTime}] `;
+            }
         }
         planText += title;
         if (location) planText += ` @${location}`;
@@ -883,7 +902,7 @@ if (scheduleForm) {
                 if (!schedules[targetDateKey]) schedules[targetDateKey] = [];
                 schedules[targetDateKey].push(planText);
                 
-                // 画面の選択状態も変更先の日付にジャンプさせる
+                // 画面の選択状態も変更先の日付に合わせる
                 selected = targetDateKey; 
                 const [targetY, targetM] = targetDateKey.split('-').map(Number);
                 cur.setFullYear(targetY);
@@ -894,24 +913,26 @@ if (scheduleForm) {
             if (!schedules[targetDateKey]) schedules[targetDateKey] = [];
             schedules[targetDateKey].push(planText);
             
-            // 新規追加時も、追加先の日付に画面を合わせる
+            // 新規追加時も追加先の日付に画面を合わせる
             selected = targetDateKey;
             const [targetY, targetM] = targetDateKey.split('-').map(Number);
             cur.setFullYear(targetY);
             cur.setMonth(targetM - 1);
         }
 
-        // ローカルストレージに保存
+        // ローカルストレージに確定保存
         localStorage.setItem(STORAGE_KEY, JSON.stringify(schedules));
         
         // モーダルを閉じる
-        document.getElementById('calendarModalOverlay').style.display = 'none';
-        scheduleForm.reset();
+        const overlay = document.getElementById('calendarModalOverlay');
+        if (overlay) overlay.style.display = 'none';
+        if (scheduleForm) scheduleForm.reset();
         
-        // カレンダー全体を最新状態に再描画（月が変わった可能性もあるためtrueで更新）
+        // カレンダー画面を強制的にリフレッシュ（trueにすることで月をまたぐ移動も即時描画されます）
         if (typeof render === 'function') {
             render(true);
         }
     }, { capture: true });
 }
+
 });
