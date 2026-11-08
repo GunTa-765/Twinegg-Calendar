@@ -447,6 +447,12 @@ body {
         border-top: 1px solid #e5e7eb;
         box-sizing: border-box;
     }
+
+    .side-box .list-item {
+        font-size: 28px !important;
+        padding: 12px 10px;
+    }
+
     .pc-input-area {
         display: none;
     }
