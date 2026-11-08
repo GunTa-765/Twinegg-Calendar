@@ -343,7 +343,7 @@ body {
         display: flex;
         flex-direction: column;
         box-sizing: border-box;
-        position: relative; /* 年月ポップアップ用 */
+        position: relative;
     }
     .header {
         display: flex;
@@ -353,12 +353,9 @@ body {
         width: 100%;
         height: 50px;
     }
-    
-    /* 年月のフォントサイズを拡大 */
     .calendar-title {
         font-size: 40px !important;
     }
-    
     .header-center {
         display: flex;
         align-items: center;
@@ -374,8 +371,6 @@ body {
         border: none;
         cursor: pointer;
     }
-    
-    /* 曜日のフォントサイズを拡大 */
     .days-grid {
         display: grid;
         grid-template-columns: repeat(7, 1fr);
@@ -386,8 +381,6 @@ body {
         padding-bottom: 6px;
         margin-bottom: 6px;
     }
-    
-    /* マスの最小高さを拡大 */
     .weeks-grid {
         display: grid;
         grid-template-columns: repeat(7, 1fr);
@@ -395,8 +388,6 @@ body {
         gap: 2px;
         width: 100%;
     }
-    
-    /* セルの最小高さを拡大 */
     .day-cell {
         min-height: 200px !important; 
         border: 1px solid #e5e7eb;
@@ -408,27 +399,19 @@ body {
         overflow: hidden;
         background: white;
     }
-    
-    /* 空セルの最小高さを拡大 */
     .empty-cell {
         min-height: 200px !important; 
         background: #f9fafb;
         border: 1px solid #f3f4f6;
         box-sizing: border-box;
     }
-    
-    /* 日付数字のフォントサイズを拡大 */
     .cell-top span[style*="font-size:20px"] {
         font-size: 28px !important;
     }
-    
-    /* マスの中の予定テキストのフォントサイズを拡大 */
     .plan-container .plan-item {
         font-size: 22px !important;
         padding: 4px 6px;
     }
-
-    /* 六曜・祝日・気温の文字もバランスを調整 */
     .rokuyo {
         font-size: 14px !important;
     }
@@ -438,8 +421,6 @@ body {
     .temp-wrap {
         font-size: 14px !important;
     }
-
-    /* 下部の予定ペイン */
     .side-box {
         width: 100vw;
         background: white;
@@ -447,23 +428,17 @@ body {
         border-top: 1px solid #e5e7eb;
         box-sizing: border-box;
     }
-    
-    /* 【確定】スマホ画面下部：当日の予定リストの文字サイズを2倍に拡大 */
+    /* スマホ画面下部：当日の予定リストの文字サイズを2倍に拡大 */
     .side-box .list-item {
-        font-size: 28px !important; /* 文字を大きく */
-        padding: 12px 10px !important; /* 押しやすく余白を調整 */
+        font-size: 28px !important;
+        padding: 12px 10px !important;
     }
-    
-    /* 予定が無いときのメッセージも大きく調整 */
     .side-box #plan-list p {
         font-size: 24px !important;
     }
-
     .pc-input-area {
         display: none;
     }
-
-    /* 右下の丸い「＋」追加ボタン */
     .mobile-fab {
         display: flex;
         position: fixed;
@@ -482,8 +457,6 @@ body {
         cursor: pointer;
         z-index: 90;
     }
-
-    /* モーダルポップアップ */
     .mobile-modal {
         display: flex;
         position: fixed;
@@ -511,8 +484,6 @@ body {
         gap: 10px;
         margin-top: 15px;
     }
-
-    /* 編集モーダル内のスマホ用調整 */
     .calendar-modal {
         padding: 15px;
     }
@@ -525,55 +496,68 @@ body {
         display: none; /* スマホ時は「～」を非表示にして縦に並べる */
     }
 }
+
 /* ==========================================================================
    【最終確定】選択されたマスの青枠を、すべてのマスで絶対最優先にする設定
    ========================================================================== */
 
-/* 1. 通常のマス、土日、祝日など、どのマスであっても選択されたら強固な青枠にする */
+/* 今日のマス目のデザイン（ほんのり薄い黄色にして、境界線を赤色にする例です） */
+.day-today {
+    background: #fffdeb !important;
+    border: 2px solid #ff3b30 !important;
+}
+.day-cell.day-today.selected {
+    border: 2px solid #0066cc !important;
+    background: #e6f2ff !important;
+}
+.weeks-grid .day-cell.day-today.selected,
+.container .day-cell.day-today.selected,
+.day-cell.day-today.selected {
+    border: 2px solid #0066cc !important;
+    background: #e6f2ff !important;
+    outline: none;
+}
+
+/* 通常のマス、土日、祝日など、どのマスであっても選択されたら強固な青枠にする */
 .weeks-grid .day-cell.selected,
 .container .day-cell.selected,
 .day-cell.selected {
-    border: 2px solid #0066cc !important; /* クッキリした選択の青枠 */
-    background: #e6f2ff !important;       /* 選択時の薄い青色の背景 */
+    border: 2px solid #0066cc !important;
+    background: #e6f2ff !important;
     outline: none;
-    z-index: 10;                          /* 枠線を最前面に引っ張り出す */
+    z-index: 10;
 }
 
-/* 2. 選択されたマスの中にある日付数字の色を、曜日に関わらず見やすく調整（お好みで） */
 .day-cell.selected .cell-top span {
     color: #0066cc !important; 
 }
-/* ==========================================================================
-   【最終確定】今日のマス（絶対赤キープ）と選択したマス（青枠ベージュ）
-   ========================================================================== */
 
-/* 1. 今日のマス（当日）：選択していてもしていなくても、絶対に赤枠で赤くする */
+/* 今日のマス（絶対赤キープ）と選択したマス（青枠ベージュ） */
 .day-today,
 .weeks-grid .day-cell.day-today.selected,
 .container .day-cell.day-today.selected,
 .day-cell.day-today.selected {
-    background: #ffebee !important;       /* ほんのり薄い赤色（文字が見やすい赤系統） */
-    border: 2px solid #ff3b30 !important; /* クッキリ鮮やかな赤枠 */
+    background: #ffebee !important;
+    border: 2px solid #ff3b30 !important;
     z-index: 5;
 }
 
-/* 2. 今日以外のマスがクリックされて「選択」されたときは【青枠ベージュ色】にする */
 .weeks-grid .day-cell.selected,
 .container .day-cell.selected,
 .day-cell.selected {
-    background: #fffdeb !important;       /* 薄い黄色（ベージュ色） */
-    border: 2px solid #0066cc !important; /* クッキリした青枠 */
+    background: #fffdeb !important;
+    border: 2px solid #0066cc !important;
     outline: none;
-    z-index: 10;                          /* 選択中の枠線を一番手前に出す */
+    z-index: 10;
 }
 
-/* 3. 選択された際の日付数字の色をそれぞれに合わせる */
 .day-cell.day-today.selected .cell-top span {
-    color: #ff3b30 !important;            /* 今日のマスを選択したときは文字を赤に */
+    color: #ff3b30 !important;
 }
 .day-cell.selected:not(.day-today) .cell-top span {
-    color: #0066cc !important;            /* 他のマスを選択したときは文字を青に */
+    color: #0066cc !important;
 }
+
 /* ==========================================================================
    4. Yahooカレンダー風 予定編集モーダル スタイル
    ========================================================================== */
@@ -699,26 +683,25 @@ body {
 }
 .btn-cancel:hover { background-color: #f8f9fa; }
 
-}
 /* ==========================================================================
    5. Yahooカレンダー風 年月選択ポップアップ（ジャンプ機能）最前面・中央配置化
    ========================================================================== */
 .calendar-box {
-    position: relative; /* ポップアップの基準点にするため追記 */
+    position: relative;
 }
 
 .ym-picker-box {
-    position: fixed; /* absolute から fixed に変更して最前面へ */
-    top: 100px;      /* 画面上部からの位置（ヘッダーが見える位置に調整） */
+    position: fixed;
+    top: 100px;
     left: 50%;
     transform: translateX(-50%);
     width: 280px;
     background: #ffffff;
     border: 1px solid #ccc;
     border-radius: 8px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.3); /* 浮遊感を出すため影を強めに */
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
     padding: 15px;
-    z-index: 99999 !important; /* 日付マスの z-index に絶対負けない超高数値 */
+    z-index: 99999 !important;
     font-family: sans-serif;
     box-sizing: border-box;
 }
@@ -767,20 +750,11 @@ body {
 }
 
 /* ==========================================================================
-   土曜日・日曜日のマスの色設定（追記）
+   土曜日・日曜日のマスの色設定
    ========================================================================== */
-
-/* 土曜日のマスの背景を薄い青色にする場合 */
 .day-cell.day-sat {
     background-color: #f0f4ff !important;
 }
-
-/* 日曜日のマスの背景を薄い赤色にする場合 */
 .day-cell.day-sun-holiday {
     background-color: #fff0f0 !important;
 }
-
-/* ����【補足】もし背景ではなく「日付の枠線」自体を青や赤にしたい場合は、以下のように指定してください
-.day-cell.day-sat { border: 1px solid #0066cc !important; }
-.day-cell.day-sun-holiday { border: 1px solid #ff3b30 !important; }
-*/
