@@ -421,12 +421,17 @@ body {
     .temp-wrap {
         font-size: 14px !important;
     }
+    /* 下部の予定ペイン */
     .side-box {
         width: 100vw;
         background: white;
         padding: 15px;
         border-top: 1px solid #e5e7eb;
         box-sizing: border-box;
+    }
+    /* 【追記】スマホ画面下部：日付タイトルのフォントサイズを大きく */
+    .side-box .side-title {
+        font-size: 28px !important;
     }
     /* スマホ画面下部：当日の予定リストの文字サイズを2倍に拡大 */
     .side-box .list-item {
