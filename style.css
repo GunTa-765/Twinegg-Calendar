@@ -319,9 +319,8 @@ body {
     }
 }
 
-
 /* ==========================================================================
-   3. スマートフォン（画面幅 768px 以下）の縦スクロールレイアウト
+   3. スマートフォン（画面幅 768px 以下）の縦スクロールレイアウト（統合・確定版）
    ========================================================================== */
 @media screen and (max-width: 768px) {
     body {
@@ -344,6 +343,7 @@ body {
         display: flex;
         flex-direction: column;
         box-sizing: border-box;
+        position: relative; /* 年月ポップアップ用 */
     }
     .header {
         display: flex;
@@ -351,10 +351,10 @@ body {
         align-items: center;
         margin-bottom: 15px;
         width: 100%;
-        height: 50px; /* 高さを少し調整 */
+        height: 50px;
     }
     
-    /* 【変更】年月のフォントサイズを元の20pxから「40px（倍）」に拡大 */
+    /* 年月のフォントサイズを拡大 */
     .calendar-title {
         font-size: 40px !important;
     }
@@ -369,13 +369,13 @@ body {
     }
     .btn-settings-toggle {
         display: block;
-        font-size: 32px; /* アイコンも少し拡大 */
+        font-size: 32px;
         background: none;
         border: none;
         cursor: pointer;
     }
     
-    /* 【変更】曜日のフォントサイズを元の12pxから「24px（倍）」に拡大 */
+    /* 曜日のフォントサイズを拡大 */
     .days-grid {
         display: grid;
         grid-template-columns: repeat(7, 1fr);
@@ -387,7 +387,7 @@ body {
         margin-bottom: 6px;
     }
     
-    /* 【変更】マスの最小高さを元の100pxから「200px（倍）」に拡大 */
+    /* マスの最小高さを拡大 */
     .weeks-grid {
         display: grid;
         grid-template-columns: repeat(7, 1fr);
@@ -396,7 +396,7 @@ body {
         width: 100%;
     }
     
-    /* 【変更】セルの最小高さを元の100pxから「200px（倍）」に拡大 */
+    /* セルの最小高さを拡大 */
     .day-cell {
         min-height: 200px !important; 
         border: 1px solid #e5e7eb;
@@ -409,7 +409,7 @@ body {
         background: white;
     }
     
-    /* 【変更】空セルの最小高さを元の100pxから「200px（倍）」に拡大 */
+    /* 空セルの最小高さを拡大 */
     .empty-cell {
         min-height: 200px !important; 
         background: #f9fafb;
@@ -417,18 +417,18 @@ body {
         box-sizing: border-box;
     }
     
-    /* 【変更】日付数字のフォントサイズを元の20px（実質14px指定）から「28px（倍）」に拡大 */
+    /* 日付数字のフォントサイズを拡大 */
     .cell-top span[style*="font-size:20px"] {
         font-size: 28px !important;
     }
     
-    /* 【変更】予定テキスト（.plan-item）のフォントサイズを元の11pxから「22px（倍）」に拡大 */
+    /* マスの中の予定テキストのフォントサイズを拡大 */
     .plan-container .plan-item {
         font-size: 22px !important;
-        padding: 4px 6px; /* 文字拡大に合わせて内側の余白を微調整 */
+        padding: 4px 6px;
     }
 
-    /* 六曜・祝日・気温の文字もバランスを崩さないよう少し拡大（必要に応じて調整してください） */
+    /* 六曜・祝日・気温の文字もバランスを調整 */
     .rokuyo {
         font-size: 14px !important;
     }
@@ -447,10 +447,16 @@ body {
         border-top: 1px solid #e5e7eb;
         box-sizing: border-box;
     }
-
+    
+    /* 【確定】スマホ画面下部：当日の予定リストの文字サイズを2倍に拡大 */
     .side-box .list-item {
-        font-size: 28px !important;
-        padding: 12px 10px;
+        font-size: 28px !important; /* 文字を大きく */
+        padding: 12px 10px !important; /* 押しやすく余白を調整 */
+    }
+    
+    /* 予定が無いときのメッセージも大きく調整 */
+    .side-box #plan-list p {
+        font-size: 24px !important;
     }
 
     .pc-input-area {
@@ -497,7 +503,7 @@ body {
         width: 85%;
         max-width: 320px;
         border-radius: 8px;
-        box-shadow: 0 4px 15 rgba(0,0,0,0.2);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
     }
     .mobile-modal-actions {
         display: flex;
@@ -505,26 +511,20 @@ body {
         gap: 10px;
         margin-top: 15px;
     }
+
+    /* 編集モーダル内のスマホ用調整 */
+    .calendar-modal {
+        padding: 15px;
+    }
+    .time-range {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 5px;
+    }
+    .time-range span {
+        display: none; /* スマホ時は「～」を非表示にして縦に並べる */
+    }
 }
-/* 今日のマス目のデザイン（ほんのり薄い黄色にして、境界線を赤色にする例です） */
-.day-today {
-    background: #fffdeb !important; /* 薄い黄色 */
-    border: 2px solid #ff3b30 !important; /* くっきりした赤枠 */
-}
-/* 今日かつ選択されている場合は、選択枠の青色を最優先で表示する */
-.day-cell.day-today.selected {
-    border: 2px solid #0066cc !important; /* 強制的に選択枠の青色にする */
-    background: #e6f2ff !important;       /* 背景も選択時の薄い青色にする */
-}
-/* 今日（当日）かつ「クリックして選択されている」場合は、青枠を最優先にする */
-.weeks-grid .day-cell.day-today.selected,
-.container .day-cell.day-today.selected,
-.day-cell.day-today.selected {
-    border: 2px solid #0066cc !important; /* 最優先で選択枠の青色にする */
-    background: #e6f2ff !important;       /* 背景も選択時の薄い青色にする */
-    outline: none;
-}
-/* ==========================================================================
    【最終確定】選択されたマスの青枠を、すべてのマスで絶対最優先にする設定
    ========================================================================== */
 
@@ -698,19 +698,6 @@ body {
 }
 .btn-cancel:hover { background-color: #f8f9fa; }
 
-/* スマホ用の微調整 */
-@media screen and (max-width: 768px) {
-    .calendar-modal {
-        padding: 15px;
-    }
-    .time-range {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 5px;
-    }
-    .time-range span {
-        display: none; /* スマホ時は「～」を非表示にして縦に並べる */
-    }
 }
 /* ==========================================================================
    5. Yahooカレンダー風 年月選択ポップアップ（ジャンプ機能）最前面・中央配置化
