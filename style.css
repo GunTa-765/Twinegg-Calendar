@@ -763,3 +763,56 @@ body {
 .day-cell.day-sun-holiday {
     background-color: #fff0f0 !important;
 }
+/* ==========================================================================
+   スマホ画面：日付タップ時の全画面予定リスト切り替えスタイル
+   ========================================================================== */
+@media screen and (max-width: 768px) {
+    /* 通常時は下部の予定エリアを非表示にする */
+    .container:not(.mobile-detail-mode) .side-box {
+        display: none !important;
+    }
+
+    /* 予定詳細モード時はカレンダー本体を非表示にする */
+    .container.mobile-detail-mode .calendar-box {
+        display: none !important;
+    }
+
+    /* 予定詳細モード時は予定エリアを画面いっぱいに表示する */
+    .container.mobile-detail-mode .side-box {
+        display: flex !important;
+        flex-direction: column;
+        width: 100vw;
+        min-height: 100vh;
+        background: #ffffff;
+        padding: 20px;
+        box-sizing: border-box;
+        border-top: none;
+    }
+
+    /* 戻るボタンの装飾 */
+    .mobile-back-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: #f3f4f6;
+        border: 1px solid #d1d5db;
+        color: #0066cc;
+        font-size: 20px;
+        font-weight: bold;
+        padding: 10px 16px;
+        border-radius: 6px;
+        margin-bottom: 16px;
+        cursor: pointer;
+        align-self: flex-start;
+    }
+    .mobile-back-btn:active {
+        background: #e5e7eb;
+    }
+}
+
+/* PC画面では戻るボタンを隠す */
+@media screen and (min-width: 769px) {
+    .mobile-back-btn {
+        display: none !important;
+    }
+}
