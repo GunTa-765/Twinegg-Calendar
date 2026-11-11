@@ -816,3 +816,33 @@ body {
         display: none !important;
     }
 }
+/* ==========================================================================
+   スマホ画面：予定一覧画面の文字サイズ拡大（2段階アップ）
+   ========================================================================== */
+@media screen and (max-width: 768px) {
+    /* 画面上部の日付タイトル（例：2026-11-12 の予定） */
+    .side-box .side-title {
+        font-size: 36px !important;
+        margin-bottom: 16px !important;
+    }
+
+    /* 各予定の項目テキスト（28px → 38pxへ拡大） */
+    .side-box .list-item {
+        font-size: 38px !important;
+        padding: 18px 14px !important;
+        margin-bottom: 12px !important;
+        line-height: 1.4 !important;
+        align-items: center;
+    }
+
+    /* 予定の右端にある削除「×」ボタンも押しやすいサイズに拡大 */
+    .side-box .list-item button {
+        font-size: 40px !important;
+        padding: 0 12px !important;
+    }
+
+    /* 「予定はありません」のメッセージ */
+    .side-box #plan-list p {
+        font-size: 32px !important;
+    }
+}
