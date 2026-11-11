@@ -948,4 +948,48 @@ function openMobileAddModal() {
     }
 }
 function addPlanMobile() {} // 完全に無効化
+// ==========================================================================
+// スマホ画面：日付タップ時の画面切り替え制御
+// ==========================================================================
+
+/**
+ * カレンダー画面に戻る処理
+ */
+function closeMobileDayView() {
+    const container = document.querySelector('.container');
+    if (container) {
+        container.classList.remove('mobile-detail-mode');
+    }
+}
+
+/**
+ * 既存の selectDate 関数を拡張（スマホ時は予定一覧画面へ切り替え）
+ */
+const originalSelectDate = selectDate;
+selectDate = function(k) {
+    // 元の選択処理を実行
+    originalSelectDate(k);
+
+    // スマホ画面（768px以下）の場合のみ画面を切り替える
+    if (window.innerWidth <= 768) {
+        const container = document.querySelector('.container');
+        const sideBox = document.querySelector('.side-box');
+        
+        if (container && sideBox) {
+            // 「カレンダーに戻る」ボタンがまだ無ければ生成して先頭に追加
+            if (!document.getElementById('mobile-back-btn')) {
+                const backBtn = document.createElement('button');
+                backBtn.id = 'mobile-back-btn';
+                backBtn.className = 'mobile-back-btn';
+                backBtn.innerText = '◀ カレンダーに戻る';
+                backBtn.onclick = closeMobileDayView;
+                sideBox.insertBefore(backBtn, sideBox.firstChild);
+            }
+
+            // 詳細画面モードに切り替え、スクロール位置を一番上に戻す
+            container.classList.add('mobile-detail-mode');
+            window.scrollTo(0, 0);
+        }
+    }
+};
 
