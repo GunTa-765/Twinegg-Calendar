@@ -846,3 +846,118 @@ body {
         font-size: 32px !important;
     }
 }
+/* ==========================================================================
+   PC・スマホ共通：予定追加・編集画面の全画面表示化
+   ========================================================================== */
+
+/* オーバーレイ背景を白一色の全画面コンテナに変更 */
+#calendarModalOverlay.modal-overlay {
+    background-color: #ffffff !important;
+    align-items: flex-start !important;
+    justify-content: center !important;
+    overflow-y: auto !important;
+    padding: 0 !important;
+}
+
+/* 入力フォーム本体を画面いっぱいに広げる */
+#calendarModalOverlay .calendar-modal {
+    width: 100% !important;
+    max-width: 720px !important; /* PCで見やすい適切な最大幅 */
+    min-height: 100vh !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    padding: 32px 24px !important;
+    margin: 0 !important;
+    animation: none !important;
+    box-sizing: border-box !important;
+}
+
+/* PC画面での入力欄の視認性アップ */
+#calendarModalOverlay .modal-title {
+    font-size: 24px !important;
+}
+#calendarModalOverlay .close-btn {
+    font-size: 36px !important;
+}
+#calendarModalOverlay .form-group {
+    margin-bottom: 22px !important;
+}
+#calendarModalOverlay .form-group label {
+    font-size: 16px !important;
+    margin-bottom: 8px !important;
+}
+#calendarModalOverlay .form-control {
+    font-size: 18px !important;
+    padding: 12px 14px !important;
+}
+#calendarModalOverlay .btn-submit,
+#calendarModalOverlay .btn-cancel {
+    font-size: 16px !important;
+    padding: 12px 28px !important;
+}
+
+/* ==========================================================================
+   スマホ画面（768px以下）：予定一覧画面と同じ特大フォントを適用
+   ========================================================================== */
+@media screen and (max-width: 768px) {
+    #calendarModalOverlay .calendar-modal {
+        max-width: 100vw !important;
+        padding: 20px !important;
+    }
+
+    /* ヘッダータイトル（36px）と閉じるボタン */
+    #calendarModalOverlay .modal-title {
+        font-size: 36px !important;
+    }
+    #calendarModalOverlay .close-btn {
+        font-size: 48px !important;
+        padding: 0 10px !important;
+    }
+
+    /* 項目ラベル（32px） */
+    #calendarModalOverlay .form-group {
+        margin-bottom: 28px !important;
+    }
+    #calendarModalOverlay .form-group label {
+        font-size: 32px !important;
+        margin-bottom: 12px !important;
+    }
+
+    /* テキスト入力欄・日時選択欄（予定一覧と同じ38px） */
+    #calendarModalOverlay .form-control {
+        font-size: 38px !important;
+        padding: 16px 14px !important;
+        line-height: 1.4 !important;
+        height: auto !important;
+        border-radius: 8px !important;
+    }
+
+    /* 終日チェックボックスも文字サイズに合わせて拡大 */
+    #calendarModalOverlay .checkbox-group {
+        gap: 14px !important;
+    }
+    #calendarModalOverlay .checkbox-group input[type="checkbox"] {
+        width: 34px !important;
+        height: 34px !important;
+    }
+    #calendarModalOverlay .checkbox-group label {
+        font-size: 34px !important;
+        margin-bottom: 0 !important;
+    }
+
+    /* 下部の保存・キャンセルボタン（34px・縦並びで押しやすく） */
+    #calendarModalOverlay .modal-footer {
+        flex-direction: column-reverse !important;
+        gap: 16px !important;
+        margin-top: 32px !important;
+        padding-top: 24px !important;
+    }
+    #calendarModalOverlay .btn-submit,
+    #calendarModalOverlay .btn-cancel {
+        width: 100% !important;
+        font-size: 34px !important;
+        padding: 18px !important;
+        border-radius: 8px !important;
+        text-align: center !important;
+    }
+}
