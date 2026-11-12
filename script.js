@@ -994,37 +994,80 @@ selectDate = function(k) {
 };
 
 // ==========================================================================
-// 予定のアイコン選択・表示機能（imageフォルダ内の画像を利用）
+// 予定のアイコン自動読み込み ＆ 確実な保存・表示機能
 // ==========================================================================
 
-// ★ここに image フォルダ内のファイル名を列挙してください（例: 'icon1.png', 'car.png'）
-const ICON_FILES = [
-    'hospital.png',
-    'meal.png',
-    'work.png',
-    'train.png',
-    'shopping.png',
-    'birthday.png'
-];
-
-let selectedIconFile = ''; // 現在選択中のアイコンファイル名
+let discoveredIcons = []; // 自動検出された画像ファイル名のリスト
+let selectedIconFile = ''; // 現在選択されているアイコンのファイル名
 
 /**
- * 予定テキスト内の [icon:xxx.png] を <img> タグに変換するヘルパー
+ * image/ フォルダ内の画像ファイルを自動的にスキャンして取得する
  */
-function formatPlanWithIcon(rawText, sizeClass = 'plan-icon-inline') {
+async function loadIconsFromImageFolder() {
+    const found = new Set();
+
+    // 方法1: image/ ディレクトリの一覧HTMLから画像リンクを自動抽出（Live Server / Apache / Nginx対応）
+    try {
+        const res = await fetch(`image/?t=${Date.now()}`, { cache: 'no-store' });
+        if (res.ok) {
+            const html = await res.text();
+            const doc = new DOMParser().parseFromString(html, 'text/html');
+            doc.querySelectorAll('a').forEach(a => {
+                const href = a.getAttribute('href') || '';
+                const cleanPath = href.split('?')[0].split('#')[0];
+                const fileName = cleanPath.split('/').pop();
+                if (/\.(png|jpe?g|gif|webp|svg)$/i.test(fileName)) {
+                    found.add(decodeURIComponent(fileName));
+                }
+            });
+        }
+    } catch (e) {
+        // ディレクトリ一覧が無効な環境ではスキップ
+    }
+
+    // 方法2: ディレクトリ一覧が閉じられているサーバー向けに image/icons.json も確認
+    if (found.size === 0) {
+        try {
+            const resJson = await fetch(`image/icons.json?t=${Date.now()}`, { cache: 'no-store' });
+            if (resJson.ok) {
+                const list = await resJson.json();
+                if (Array.isArray(list)) {
+                    list.forEach(f => found.add(f));
+                }
+            }
+        } catch (e) {}
+    }
+
+    discoveredIcons = Array.from(found);
+}
+
+/**
+ * 予定文字列の先頭にある [icon:ファイル名] を <img> タグに変換する
+ */
+function formatPlanWithIcon(rawText, sizeClass) {
     const match = rawText.match(/^\[icon:(.*?)\]\s*/);
     if (!match) return rawText;
     const fileName = match[1];
     const cleanText = rawText.replace(match[0], '');
-    return `<img src="image/${fileName}" alt="" class="${sizeClass}">${cleanText}`;
+    return `<img src="image/${encodeURIComponent(fileName)}" alt="" class="${sizeClass}">${cleanText}`;
 }
 
 /**
- * 入力画面にアイコン選択UIを自動生成・セットする
+ * 予定入力画面にアイコン選択UIを描画する
  */
-function setupIconSelectorUI(currentIcon = '') {
+async function setupIconSelectorUI(currentIcon = '') {
     selectedIconFile = currentIcon;
+
+    // まだ読み込めていない場合はフォルダをスキャン
+    if (discoveredIcons.length === 0) {
+        await loadIconsFromImageFolder();
+    }
+
+    // 編集中の予定に使われているアイコンがリストに無ければ追加しておく
+    if (currentIcon && !discoveredIcons.includes(currentIcon)) {
+        discoveredIcons.push(currentIcon);
+    }
+
     const form = document.getElementById('scheduleForm');
     if (!form) return;
 
@@ -1033,7 +1076,6 @@ function setupIconSelectorUI(currentIcon = '') {
         group = document.createElement('div');
         group.id = 'icon-selector-group';
         group.className = 'form-group';
-        // タイトル入力欄のすぐ下に挿入
         const firstGroup = form.querySelector('.form-group');
         if (firstGroup && firstGroup.nextSibling) {
             form.insertBefore(group, firstGroup.nextSibling);
@@ -1043,11 +1085,11 @@ function setupIconSelectorUI(currentIcon = '') {
     }
 
     const noneSelected = selectedIconFile === '' ? 'selected' : '';
-    const itemsHtml = ICON_FILES.map(file => {
+    const itemsHtml = discoveredIcons.map(file => {
         const isSel = selectedIconFile === file ? 'selected' : '';
         return `
-            <button type="button" class="icon-choice-btn ${isSel}" data-icon="${file}" onclick="selectScheduleIcon('${file}')">
-                <img src="image/${file}" alt="${file}">
+            <button type="button" class="icon-choice-btn ${isSel}" data-icon="${file}" onclick="selectScheduleIcon('${file.replace(/'/g, "\\'")}')">
+                <img src="image/${encodeURIComponent(file)}" alt="${file}">
             </button>
         `;
     }).join('');
@@ -1062,7 +1104,7 @@ function setupIconSelectorUI(currentIcon = '') {
 }
 
 /**
- * アイコン選択ボタンクリック時のハイライト更新
+ * アイコン選択ボタンクリック時の選択状態切り替え
  */
 function selectScheduleIcon(fileName) {
     selectedIconFile = fileName;
@@ -1071,62 +1113,152 @@ function selectScheduleIcon(fileName) {
     });
 }
 
-// 1. 新規追加ボタン押下時にアイコン選択欄を初期化
+// ==========================================================================
+// フォーム保存処理・モーダル開閉・一覧描画への統合
+// ==========================================================================
+
 document.addEventListener('DOMContentLoaded', () => {
+    // ページ起動時にバックグラウンドで image/ フォルダをスキャン
+    loadIconsFromImageFolder();
+
     const openModalBtn = document.getElementById('openModalBtn');
     const mobileFab = document.getElementById('mobile-fab');
-    const initNewIcon = () => setupIconSelectorUI('');
-    if (openModalBtn) openModalBtn.addEventListener('click', initNewIcon);
-    if (mobileFab) mobileFab.addEventListener('click', initNewIcon);
-
-    // 2. 保存時に選択されたアイコン情報を先頭に付与して保存
     const scheduleForm = document.getElementById('scheduleForm');
+
+    const initNew = () => {
+        editingPlanIndex = null;
+        setupIconSelectorUI('');
+    };
+
+    if (openModalBtn) openModalBtn.addEventListener('click', initNew);
+    if (mobileFab) mobileFab.addEventListener('click', initNew);
+
+    // 保存処理を完全統合（アイコンを含めて確実に schedules と localStorage に書き込む）
     if (scheduleForm) {
-        scheduleForm.addEventListener('submit', () => {
-            if (!selectedIconFile) return;
-            // 直前に保存された schedules[selected] の末尾要素にアイコンタグを付与
-            const list = schedules[selected];
-            if (list && list.length > 0) {
-                const targetIdx = (editingPlanIndex !== null && list[editingPlanIndex] !== undefined)
-                    ? editingPlanIndex
-                    : list.length - 1;
-                // 既存の [icon:...] を除去してから新しいアイコンを先頭に付与
-                const cleaned = list[targetIdx].replace(/^\[icon:.*?\]\s*/, '');
-                list[targetIdx] = `[icon:${selectedIconFile}] ${cleaned}`;
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(schedules));
-                if (typeof render === 'function') render(false);
+        scheduleForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            e.stopImmediatePropagation(); // 既存の古いsubmitリスナーとの競合を完全に防止
+
+            const titleInput = document.getElementById('scheduleTitle');
+            const startTimeInput = document.getElementById('startTime');
+            const endTimeInput = document.getElementById('endTime');
+            const allDayCheckbox = document.getElementById('allDayCheckbox');
+            const locationInput = document.getElementById('scheduleLocation');
+            const descInput = document.getElementById('scheduleDescription');
+
+            const title = titleInput ? titleInput.value.trim() : '';
+            if (!title) return;
+
+            const start = startTimeInput ? startTimeInput.value : '';
+            const end = endTimeInput ? endTimeInput.value : '';
+            const isAllDay = allDayCheckbox ? allDayCheckbox.checked : false;
+            const location = locationInput ? locationInput.value.trim() : '';
+            const desc = descInput ? descInput.value.trim() : '';
+
+            // 保存先の日付キー（YYYY-M-D）を決定
+            let targetDateKey = selected;
+            if (start) {
+                const datePart = start.split('T')[0];
+                if (datePart) {
+                    const parts = datePart.split('-');
+                    const y = parseInt(parts[0], 10);
+                    const m = parseInt(parts[1], 10);
+                    const d = parseInt(parts[2], 10);
+                    if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+                        targetDateKey = `${y}-${m}-${d}`;
+                    }
+                }
             }
-        });
+
+            // テキストの組み立て（選択されたアイコンがあれば先頭に付与）
+            let planText = '';
+            if (selectedIconFile) {
+                planText += `[icon:${selectedIconFile}] `;
+            }
+            if (isAllDay) {
+                planText += '[終日] ';
+            } else {
+                const startTimePart = start.includes('T') ? start.split('T')[1] : '';
+                const endTimePart = end.includes('T') ? end.split('T')[1] : '';
+                if (startTimePart) {
+                    const sTime = startTimePart.substring(0, 5);
+                    const eTime = endTimePart ? endTimePart.substring(0, 5) : '';
+                    planText += `[${sTime}～${eTime}] `;
+                }
+            }
+            planText += title;
+            if (location) planText += ` @${location}`;
+            if (desc) planText += ` (${desc})`;
+
+            // 新規追加または編集の反映
+            if (editingPlanIndex !== null) {
+                if (targetDateKey === selected) {
+                    if (!schedules[selected]) schedules[selected] = [];
+                    schedules[selected][editingPlanIndex] = planText;
+                } else {
+                    if (schedules[selected] && schedules[selected][editingPlanIndex] !== undefined) {
+                        schedules[selected].splice(editingPlanIndex, 1);
+                        if (schedules[selected].length === 0) delete schedules[selected];
+                    }
+                    if (!schedules[targetDateKey]) schedules[targetDateKey] = [];
+                    schedules[targetDateKey].push(planText);
+
+                    selected = targetDateKey;
+                    const [targetY, targetM] = targetDateKey.split('-').map(Number);
+                    cur.setFullYear(targetY);
+                    cur.setMonth(targetM - 1);
+                }
+            } else {
+                if (!schedules[targetDateKey]) schedules[targetDateKey] = [];
+                schedules[targetDateKey].push(planText);
+
+                selected = targetDateKey;
+                const [targetY, targetM] = targetDateKey.split('-').map(Number);
+                cur.setFullYear(targetY);
+                cur.setMonth(targetM - 1);
+            }
+
+            // 確実にローカルストレージへ保存
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(schedules));
+            editingPlanIndex = null;
+
+            // モーダルを閉じて再描画
+            const overlay = document.getElementById('calendarModalOverlay');
+            if (overlay) overlay.style.display = 'none';
+            scheduleForm.reset();
+
+            if (typeof render === 'function') {
+                render(true);
+            }
+        }, { capture: true });
     }
 });
 
-// 3. 既存の編集モーダル起動（openEditModal）を拡張してアイコンを復元
-const originalOpenEditModal = openEditModal;
+// 既存予定の編集モーダル起動（登録済みアイコンを復元して選択状態にする）
+const prevOpenEditModal = openEditModal;
 openEditModal = function(index) {
     const list = schedules[selected] || [];
     const rawText = list[index] || '';
     const iconMatch = rawText.match(/^\[icon:(.*?)\]\s*/);
     const extractedIcon = iconMatch ? iconMatch[1] : '';
 
-    // 元の関数がパースできるよう一時的にアイコンタグを除いた文字列を渡す
     if (iconMatch) {
         list[index] = rawText.replace(iconMatch[0], '');
     }
-    originalOpenEditModal(index);
-    // 元の配列データを復元
+    prevOpenEditModal(index);
     list[index] = rawText;
 
     setupIconSelectorUI(extractedIcon);
 };
 
-// 4. スマホ用新規追加モーダルも拡張
-const originalOpenMobileAddModal = openMobileAddModal;
+// スマホ用新規追加モーダル起動
+const prevOpenMobileAddModal = openMobileAddModal;
 openMobileAddModal = function() {
-    originalOpenMobileAddModal();
+    prevOpenMobileAddModal();
     setupIconSelectorUI('');
 };
 
-// 5. 予定一覧（renderList）の描画をアイコン対応版に上書き
+// 予定一覧の描画（縮小アイコン付き）
 renderList = function() {
     const list = schedules[selected] || [];
     document.getElementById('plan-list').innerHTML = list.length === 0
@@ -1141,12 +1273,13 @@ renderList = function() {
           `).join('');
 };
 
-// 6. カレンダーマス内の予定表示もアイコン対応版に拡張
-const originalDraw = draw;
+// カレンダーマス内の予定表示（縮小アイコン付き）
+const prevDraw = draw;
 draw = function() {
-    originalDraw();
+    prevDraw();
     document.querySelectorAll('.plan-container .plan-item').forEach(el => {
         el.innerHTML = formatPlanWithIcon(el.textContent, 'cell-plan-icon');
     });
 };
+
 render(false);
