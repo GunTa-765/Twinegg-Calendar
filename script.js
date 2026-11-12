@@ -993,3 +993,160 @@ selectDate = function(k) {
     }
 };
 
+// ==========================================================================
+// 予定のアイコン選択・表示機能（imageフォルダ内の画像を利用）
+// ==========================================================================
+
+// ★ここに image フォルダ内のファイル名を列挙してください（例: 'icon1.png', 'car.png'）
+const ICON_FILES = [
+    'hospital.png',
+    'meal.png',
+    'work.png',
+    'train.png',
+    'shopping.png',
+    'birthday.png'
+];
+
+let selectedIconFile = ''; // 現在選択中のアイコンファイル名
+
+/**
+ * 予定テキスト内の [icon:xxx.png] を <img> タグに変換するヘルパー
+ */
+function formatPlanWithIcon(rawText, sizeClass = 'plan-icon-inline') {
+    const match = rawText.match(/^\[icon:(.*?)\]\s*/);
+    if (!match) return rawText;
+    const fileName = match[1];
+    const cleanText = rawText.replace(match[0], '');
+    return `<img src="image/${fileName}" alt="" class="${sizeClass}">${cleanText}`;
+}
+
+/**
+ * 入力画面にアイコン選択UIを自動生成・セットする
+ */
+function setupIconSelectorUI(currentIcon = '') {
+    selectedIconFile = currentIcon;
+    const form = document.getElementById('scheduleForm');
+    if (!form) return;
+
+    let group = document.getElementById('icon-selector-group');
+    if (!group) {
+        group = document.createElement('div');
+        group.id = 'icon-selector-group';
+        group.className = 'form-group';
+        // タイトル入力欄のすぐ下に挿入
+        const firstGroup = form.querySelector('.form-group');
+        if (firstGroup && firstGroup.nextSibling) {
+            form.insertBefore(group, firstGroup.nextSibling);
+        } else {
+            form.insertBefore(group, form.firstChild);
+        }
+    }
+
+    const noneSelected = selectedIconFile === '' ? 'selected' : '';
+    const itemsHtml = ICON_FILES.map(file => {
+        const isSel = selectedIconFile === file ? 'selected' : '';
+        return `
+            <button type="button" class="icon-choice-btn ${isSel}" data-icon="${file}" onclick="selectScheduleIcon('${file}')">
+                <img src="image/${file}" alt="${file}">
+            </button>
+        `;
+    }).join('');
+
+    group.innerHTML = `
+        <label>アイコン</label>
+        <div class="icon-picker-grid">
+            <button type="button" class="icon-choice-btn icon-none-btn ${noneSelected}" data-icon="" onclick="selectScheduleIcon('')">なし</button>
+            ${itemsHtml}
+        </div>
+    `;
+}
+
+/**
+ * アイコン選択ボタンクリック時のハイライト更新
+ */
+function selectScheduleIcon(fileName) {
+    selectedIconFile = fileName;
+    document.querySelectorAll('.icon-choice-btn').forEach(btn => {
+        btn.classList.toggle('selected', btn.dataset.icon === fileName);
+    });
+}
+
+// 1. 新規追加ボタン押下時にアイコン選択欄を初期化
+document.addEventListener('DOMContentLoaded', () => {
+    const openModalBtn = document.getElementById('openModalBtn');
+    const mobileFab = document.getElementById('mobile-fab');
+    const initNewIcon = () => setupIconSelectorUI('');
+    if (openModalBtn) openModalBtn.addEventListener('click', initNewIcon);
+    if (mobileFab) mobileFab.addEventListener('click', initNewIcon);
+
+    // 2. 保存時に選択されたアイコン情報を先頭に付与して保存
+    const scheduleForm = document.getElementById('scheduleForm');
+    if (scheduleForm) {
+        scheduleForm.addEventListener('submit', () => {
+            if (!selectedIconFile) return;
+            // 直前に保存された schedules[selected] の末尾要素にアイコンタグを付与
+            const list = schedules[selected];
+            if (list && list.length > 0) {
+                const targetIdx = (editingPlanIndex !== null && list[editingPlanIndex] !== undefined)
+                    ? editingPlanIndex
+                    : list.length - 1;
+                // 既存の [icon:...] を除去してから新しいアイコンを先頭に付与
+                const cleaned = list[targetIdx].replace(/^\[icon:.*?\]\s*/, '');
+                list[targetIdx] = `[icon:${selectedIconFile}] ${cleaned}`;
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(schedules));
+                if (typeof render === 'function') render(false);
+            }
+        });
+    }
+});
+
+// 3. 既存の編集モーダル起動（openEditModal）を拡張してアイコンを復元
+const originalOpenEditModal = openEditModal;
+openEditModal = function(index) {
+    const list = schedules[selected] || [];
+    const rawText = list[index] || '';
+    const iconMatch = rawText.match(/^\[icon:(.*?)\]\s*/);
+    const extractedIcon = iconMatch ? iconMatch[1] : '';
+
+    // 元の関数がパースできるよう一時的にアイコンタグを除いた文字列を渡す
+    if (iconMatch) {
+        list[index] = rawText.replace(iconMatch[0], '');
+    }
+    originalOpenEditModal(index);
+    // 元の配列データを復元
+    list[index] = rawText;
+
+    setupIconSelectorUI(extractedIcon);
+};
+
+// 4. スマホ用新規追加モーダルも拡張
+const originalOpenMobileAddModal = openMobileAddModal;
+openMobileAddModal = function() {
+    originalOpenMobileAddModal();
+    setupIconSelectorUI('');
+};
+
+// 5. 予定一覧（renderList）の描画をアイコン対応版に上書き
+renderList = function() {
+    const list = schedules[selected] || [];
+    document.getElementById('plan-list').innerHTML = list.length === 0
+        ? "<p style='color:#999;font-size:13px;'>予定はありません</p>"
+        : list.map((p, i) => `
+            <div class="list-item" style="cursor:pointer;">
+                <span onclick="openEditModal(${i})" style="flex:1; display:flex; align-items:center; gap:8px;">
+                    ${formatPlanWithIcon(p, 'list-plan-icon')}
+                </span>
+                <button style="color:red;border:none;background:none;cursor:pointer;font-weight:bold;padding:0 5px;" onclick="delPlan(${i}); event.stopPropagation();">×</button>
+            </div>
+          `).join('');
+};
+
+// 6. カレンダーマス内の予定表示もアイコン対応版に拡張
+const originalDraw = draw;
+draw = function() {
+    originalDraw();
+    document.querySelectorAll('.plan-container .plan-item').forEach(el => {
+        el.innerHTML = formatPlanWithIcon(el.textContent, 'cell-plan-icon');
+    });
+};
+render(false);
