@@ -385,138 +385,191 @@ function selectPickerMonth(m) {
  * 登録されているすべての予定をCSVファイルとしてエクスポートする
  */
 function exportToCSV() {
-    // 登録されている予定（schedules）が空っぽの場合は処理を中断
-    if (Object.keys(schedules).length === 0) {
-        alert("エクスポートする予定がありません。");
-        return;
-    }
+    const headers = new Array(
+        'Subject',
+        'Start Date',
+        'Start Time',
+        'End Date',
+        'End Time',
+        'All Day Event',
+        'Description',
+        'Location'
+    );
+    const rows = new Array(headers.join(','));
 
-    // CSVのデータを格納する配列
-    let csvRows = [];
+    const escapeCsvCell = (value) => {
+        const str = String(value == null ? '' : value);
+        if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+            return '"' + str.split('"').join('""') + '"';
+        }
+        return str;
+    };
 
-    // 日付キー（例: "2020-3-14"）をすべて取得して、古い順に並び替える
+    // 日付順にソート
     const sortedKeys = Object.keys(schedules).sort((a, b) => {
-        const [yA, mA, dA] = a.split('-').map(Number);
-        const [yB, mB, dB] = b.split('-').map(Number);
-        return new Date(yA, mA - 1, dA) - new Date(yB, mB - 1, dB);
+        const aParts = a.split('-').map(Number);
+        const bParts = b.split('-').map(Number);
+        return new Date(aParts.at(0), aParts.at(1) - 1, aParts.at(2)) - new Date(bParts.at(0), bParts.at(1) - 1, bParts.at(2));
     });
 
-    // 日付ごとに予定をCSVの行フォーマットに変換
-    for (const key of sortedKeys) {
-        const [year, month, day] = key.split('-');
-        
-        // 2桁に揃える（例: 3月 ➔ 03月、7日 ➔ 07日）
-        const yStr = `${year}年`;
-        const mStr = `${String(month).padStart(2, '0')}月`;
-        const dStr = `${String(day).padStart(2, '0')}日`;
-        
-        // その日の予定リストをループして1件ずつ行を作る
-        for (const plan of schedules[key]) {
-            // 予定内容にダブルクォーテーションが含まれている場合のバグ回避（エスケープ処理）
-            const cleanPlan = plan.replace(/"/g, '""');
-            // 「2020年,03月,14日,"予定内容"」の形にする
-            csvRows.push(`${yStr},${mStr},${dStr},"${cleanPlan}"`);
-        }
-    }
+    sortedKeys.forEach(dateKey => {
+        const dParts = dateKey.split('-').map(Number);
+        const y = dParts.at(0);
+        const m = dParts.at(1);
+        const d = dParts.at(2);
+        if (!y || !m || !d) return;
 
-    // CSVテキストを作成（Excel等で文字化けしないよう、改行コードは \r\n に指定）
-    const csvString = csvRows.join('\r\n');
+        // Googleカレンダー標準の日付形式（MM/DD/YYYY）
+        const formattedDate = `${String(m).padStart(2, '0')}/${String(d).padStart(2, '0')}/${y}`;
+        const dayPlans = schedules[dateKey] || new Array();
 
-    // 日本語（UTF-8）の文字化けを防ぐための「BOM」というサインを先頭に付与
-    const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
-    const blob = new Blob([bom, csvString], { type: 'text/csv;charset=utf-8;' });
-    
-    // ダウンロード用のリンクを一時的に作って自動クリックさせる
-    const link = document.createElement("a");
+        dayPlans.forEach(rawText => {
+            let text = String(rawText || '');
+            let iconTag = '';
+
+            // 1. 新形式のアイコンタグ [icon:xxx.png] を抽出して保持
+            const newIconMatch = text.match(/^\[icon:(.*?)\]\s*/);
+            if (newIconMatch) {
+                iconTag = `[icon:${newIconMatch.at(1)}]`;
+                text = text.replace(newIconMatch.at(0), '');
+            } else {
+                // 2. 旧形式の先頭アイコン名（半角英数字 + スペース）を抽出して保持
+                const oldIconMatch = text.match(/^([a-zA-Z0-9_-]+)\s+/);
+                if (oldIconMatch) {
+                    const iconName = oldIconMatch.at(1);
+                    iconTag = iconName.includes('.') ? `[icon:${iconName}]` : `[icon:${iconName}.png]`;
+                    text = text.replace(oldIconMatch.at(0), '');
+                }
+            }
+
+            // 3. 終日・開始時刻・終了時刻の解析
+            let isAllDay = 'False';
+            let startTime = '';
+            let endTime = '';
+
+            if (text.startsWith('[終日] ')) {
+                isAllDay = 'True';
+                text = text.replace('[終日] ', '');
+            } else {
+                const bracketTimeMatch = text.match(/^\[(\d{1,2}:\d{2})～(\d{1,2}:\d{2})?\]\s*/);
+                const plainTimeMatch = text.match(/^(\d{1,2}:\d{2})\s+/);
+
+                if (bracketTimeMatch) {
+                    startTime = bracketTimeMatch.at(1);
+                    endTime = bracketTimeMatch.at(2) || bracketTimeMatch.at(1);
+                    text = text.replace(bracketTimeMatch.at(0), '');
+                } else if (plainTimeMatch) {
+                    startTime = plainTimeMatch.at(1);
+                    endTime = plainTimeMatch.at(1);
+                    text = text.replace(plainTimeMatch.at(0), '');
+                } else {
+                    isAllDay = 'True';
+                }
+            }
+
+            // 4. 説明 (メモ) と 場所 (@場所) の抽出
+            let description = '';
+            const descMatch = text.match(/\s+\(([^()]*)\)$/);
+            if (descMatch) {
+                description = descMatch.at(1);
+                text = text.replace(descMatch.at(0), '');
+            }
+
+            let location = '';
+            const locMatch = text.match(/\s+@(.*)$/);
+            if (locMatch) {
+                location = locMatch;
+                text = text.replace(locMatch.at(0), '');
+            }
+
+            // アイコンタグを Description（説明列）の先頭に結合
+            if (iconTag) {
+                description = description ? `${iconTag} ${description}` : iconTag;
+            }
+
+            const subject = text.trim();
+
+            const rowCells = new Array(
+                escapeCsvCell(subject),
+                escapeCsvCell(formattedDate),
+                escapeCsvCell(startTime),
+                escapeCsvCell(formattedDate),
+                escapeCsvCell(endTime),
+                escapeCsvCell(isAllDay),
+                escapeCsvCell(description),
+                escapeCsvCell(location)
+            );
+            rows.push(rowCells.join(','));
+        });
+    });
+
+    const csvContent = '\uFEFF' + rows.join('\r\n');
+    const blob = new Blob(new Array(csvContent), { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
     if (link.download !== undefined) {
         const url = URL.createObjectURL(blob);
-        link.setAttribute("href", url);
-        // ファイル名は「calendar_plans.csv」になります
-        link.setAttribute("download", "calendar_plans.csv");
+        link.setAttribute('href', url);
+        link.setAttribute('download', `google_calendar_${new Date().toISOString().slice(0, 10)}.csv`);
         link.style.visibility = 'hidden';
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+        URL.revokeObjectURL(url);
     }
 }
 
 /**
- * CSVファイルから予定を読み込んでインポートする関数（システムバグ回避版）
+ * ダブルクォーテーションやセル内改行を正しく扱うCSVパーサー
  */
-function importFromCSV(input) {
-    const file = input.files[0]; // [0]を明示して安全に取得
-    if (!file) return;
+function parseCSVRows(csvText) {
+    const rows = new Array();
+    let currentRow = new Array();
+    let currentCell = '';
+    let inQuotes = false;
 
-    const reader = new FileReader();
-    
-    reader.onload = function(e) {
-        const csvData = e.target.result;
-        console.log("CSVファイルのインポートを開始します...");
+    for (let i = 0; i < csvText.length; i++) {
+        const ch = csvText.charAt(i);
+        const nextCh = csvText.charAt(i + 1);
 
-        let addCount = 0;
-        
-        // システムバグを回避するため、特殊記号を使わず「改行」でシンプルに1行ずつ分解します
-        const lines = csvData.split("\n");
-
-        for (let i = 0; i < lines.length; i++) {
-            let line = lines[i].trim();
-            // Windows形式の改行コード（\(\r\)）が残っている場合は綺麗に消去
-            line = line.replace("\(\r\)", "");
-            if (!line) continue;
-
-            const parts = line.split(",");
-            if (parts.length < 4) continue;
-
-            // 「年」「月」「日」から文字を取り除いて数値にする
-            const y = parseInt(parts[0].replace("年", ""), 10);
-            const m = parseInt(parts[1].replace("月", ""), 10);
-            const d = parseInt(parts[2].replace("日", ""), 10);
-
-            // 予定内容を取り出し、前後のダブルクォーテーションを消去
-            let rawPlanText = parts.slice(3).join(",").trim();
-            if (rawPlanText.startsWith('"') && rawPlanText.endsWith('"')) {
-                rawPlanText = rawPlanText.slice(1, -1);
+        if (inQuotes) {
+            if (ch === '"' && nextCh === '"') {
+                currentCell += '"';
+                i++;
+            } else if (ch === '"') {
+                inQuotes = false;
+            } else {
+                currentCell += ch;
             }
-
-            if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
-                const key = `${y}-${m}-${d}`;
-
-                if (!schedules[key]) {
-                    schedules[key] = [];
-                }
-
-                // スラッシュ「 / 」で区切られている場合は個別に分解する（バグの起きない安全な記述）
-                const individualPlans = rawPlanText.split(" / ");
-
-                for (let j = 0; j < individualPlans.length; j++) {
-                    let plan = individualPlans[j].trim();
-                    if (!plan) continue;
-
-                    if (!schedules[key].includes(plan)) {
-                        schedules[key].push(plan);
-                        addCount++;
-                    }
-                }
+        } else {
+            if (ch === '"') {
+                inQuotes = true;
+            } else if (ch === ',') {
+                currentRow.push(currentCell);
+                currentCell = '';
+            } else if (ch === '\r' && nextCh === '\n') {
+                currentRow.push(currentCell);
+                rows.push(currentRow);
+                currentRow = new Array();
+                currentCell = '';
+                i++;
+            } else if (ch === '\n' || ch === '\r') {
+                currentRow.push(currentCell);
+                rows.push(currentRow);
+                currentRow = new Array();
+                currentCell = '';
+            } else {
+                currentCell += ch;
             }
         }
+    }
 
-        // ストレージへ上書き保存（STORAGE_KEY変数をそのまま使用）
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(schedules));
-        
-        alert("インポートが成功しました！\n新しく " + addCount + " 件の予定を登録しました。");
-        
-        input.value = "";
-        
-        // カレンダー画面を再描画して最新状態にする
-        if (typeof render === "function") {
-            render(false);
-        }
-    };
+    if (currentCell.length > 0 || currentRow.length > 0) {
+        currentRow.push(currentCell);
+        rows.push(currentRow);
+    }
 
-    reader.readAsText(file, "UTF-8");
+    return rows;
 }
-
-// --- script.js の一番下にそのまま追記してください ---
 
 /**
  * スマホ用：予定追加画面（モーダル）を開く
@@ -994,78 +1047,99 @@ selectDate = function(k) {
 };
 
 // ==========================================================================
-// 予定のアイコン自動読み込み ＆ 確実な保存・表示機能
+// 予定のアイコン表示 ＆ Googleカレンダー風書式への統一
 // ==========================================================================
 
-let discoveredIcons = []; // 自動検出された画像ファイル名のリスト
-let selectedIconFile = ''; // 現在選択されているアイコンのファイル名
+let selectedIconFile = ''; // 現在選択中のアイコンファイル名
 
 /**
- * image/ フォルダ内の画像ファイルを自動的にスキャンして取得する
+ * 予定データをパースしてアイコンとGoogleカレンダー風HTMLに整形する
+ * 保存形式: [icon:xxx.png] [10:00～11:30] タイトル @場所 (説明)
  */
-async function loadIconsFromImageFolder() {
-    const found = new Set();
+function formatGoogleStylePlan(rawText, isListMode = true) {
+    let text = rawText || '';
 
-    // 方法1: image/ ディレクトリの一覧HTMLから画像リンクを自動抽出（Live Server / Apache / Nginx対応）
-    try {
-        const res = await fetch(`image/?t=${Date.now()}`, { cache: 'no-store' });
-        if (res.ok) {
-            const html = await res.text();
-            const doc = new DOMParser().parseFromString(html, 'text/html');
-            doc.querySelectorAll('a').forEach(a => {
-                const href = a.getAttribute('href') || '';
-                const cleanPath = href.split('?')[0].split('#')[0];
-                const fileName = cleanPath.split('/').pop();
-                if (/\.(png|jpe?g|gif|webp|svg)$/i.test(fileName)) {
-                    found.add(decodeURIComponent(fileName));
-                }
-            });
-        }
-    } catch (e) {
-        // ディレクトリ一覧が無効な環境ではスキップ
+    // 1. アイコン抽出
+    let iconHtml = '';
+    const iconMatch = text.match(/^\[icon:(.*?)\]\s*/);
+    if (iconMatch) {
+        const fileName = iconMatch[1];
+        const sizeClass = isListMode ? 'list-plan-icon' : 'cell-plan-icon';
+        iconHtml = `<img src="image/${encodeURIComponent(fileName)}" alt="" class="${sizeClass}">`;
+        text = text.replace(iconMatch[0], '');
     }
 
-    // 方法2: ディレクトリ一覧が閉じられているサーバー向けに image/icons.json も確認
-    if (found.size === 0) {
-        try {
-            const resJson = await fetch(`image/icons.json?t=${Date.now()}`, { cache: 'no-store' });
-            if (resJson.ok) {
-                const list = await resJson.json();
-                if (Array.isArray(list)) {
-                    list.forEach(f => found.add(f));
-                }
+    // 2. 時間・終日の抽出
+    let timeLabel = '';
+    if (text.startsWith('[終日] ')) {
+        text = text.replace('[終日] ', '');
+        timeLabel = isListMode ? `<span class="gcal-time-badge">終日</span>` : '';
+    } else {
+        const timeMatch = text.match(/^\[(\d{1,2}:\d{2})～(\d{1,2}:\d{2})?\]\s*/);
+        if (timeMatch) {
+            const start = timeMatch[1];
+            const end = timeMatch[2] || '';
+            text = text.replace(timeMatch[0], '');
+            if (isListMode) {
+                timeLabel = `<span class="gcal-time-text">${end ? `${start} - ${end}` : start}</span>`;
+            } else {
+                // カレンダーのマス内はGoogleカレンダー同様「開始時刻 タイトル」でシンプルに表示
+                timeLabel = `<span class="gcal-cell-time">${start}</span> `;
             }
-        } catch (e) {}
+        }
     }
 
-    discoveredIcons = Array.from(found);
-}
+    // 3. 説明 (メモ) と 場所 (@場所) の抽出
+    let desc = '';
+    const descMatch = text.match(/\s+\(([^()]*)\)$/);
+    if (descMatch) {
+        desc = descMatch[1];
+        text = text.replace(descMatch[0], '');
+    }
 
-/**
- * 予定文字列の先頭にある [icon:ファイル名] を <img> タグに変換する
- */
-function formatPlanWithIcon(rawText, sizeClass) {
-    const match = rawText.match(/^\[icon:(.*?)\]\s*/);
-    if (!match) return rawText;
-    const fileName = match[1];
-    const cleanText = rawText.replace(match[0], '');
-    return `<img src="image/${encodeURIComponent(fileName)}" alt="" class="${sizeClass}">${cleanText}`;
+    let location = '';
+    const locMatch = text.match(/\s+@(.*)$/);
+    if (locMatch) {
+        location = locMatch[1];
+        text = text.replace(locMatch[0], '');
+    }
+
+    const title = text.trim();
+
+    // カレンダーマス内の表示
+    if (!isListMode) {
+        return `${iconHtml}${timeLabel}<span class="gcal-cell-title">${title}</span>`;
+    }
+
+    // 予定一覧画面の表示（Googleカレンダー風レイアウト）
+    const locHtml = location ? `<div class="gcal-sub-info">������ ${location}</div>` : '';
+    const descHtml = desc ? `<div class="gcal-sub-info gcal-desc">������ ${desc}</div>` : '';
+
+    return `
+        <div class="gcal-item-wrapper">
+            <div class="gcal-main-row">
+                ${iconHtml}
+                <div class="gcal-title-block">
+                    ${timeLabel}
+                    <span class="gcal-title-text">${title}</span>
+                </div>
+            </div>
+            ${locHtml}
+            ${descHtml}
+        </div>
+    `;
 }
 
 /**
  * 予定入力画面にアイコン選択UIを描画する
  */
-async function setupIconSelectorUI(currentIcon = '') {
+function setupIconSelectorUI(currentIcon = '') {
     selectedIconFile = currentIcon;
+    const iconList = Array.isArray(window.CALENDAR_ICONS) ? [...window.CALENDAR_ICONS] : [];
 
-    // まだ読み込めていない場合はフォルダをスキャン
-    if (discoveredIcons.length === 0) {
-        await loadIconsFromImageFolder();
-    }
-
-    // 編集中の予定に使われているアイコンがリストに無ければ追加しておく
-    if (currentIcon && !discoveredIcons.includes(currentIcon)) {
-        discoveredIcons.push(currentIcon);
+    // 編集中の予定に使われているアイコンがリストに無ければ追加
+    if (currentIcon && !iconList.includes(currentIcon)) {
+        iconList.push(currentIcon);
     }
 
     const form = document.getElementById('scheduleForm');
@@ -1085,7 +1159,7 @@ async function setupIconSelectorUI(currentIcon = '') {
     }
 
     const noneSelected = selectedIconFile === '' ? 'selected' : '';
-    const itemsHtml = discoveredIcons.map(file => {
+    const itemsHtml = iconList.map(file => {
         const isSel = selectedIconFile === file ? 'selected' : '';
         return `
             <button type="button" class="icon-choice-btn ${isSel}" data-icon="${file}" onclick="selectScheduleIcon('${file.replace(/'/g, "\\'")}')">
@@ -1104,7 +1178,7 @@ async function setupIconSelectorUI(currentIcon = '') {
 }
 
 /**
- * アイコン選択ボタンクリック時の選択状態切り替え
+ * アイコン選択ボタンクリック時のハイライト更新
  */
 function selectScheduleIcon(fileName) {
     selectedIconFile = fileName;
@@ -1118,9 +1192,6 @@ function selectScheduleIcon(fileName) {
 // ==========================================================================
 
 document.addEventListener('DOMContentLoaded', () => {
-    // ページ起動時にバックグラウンドで image/ フォルダをスキャン
-    loadIconsFromImageFolder();
-
     const openModalBtn = document.getElementById('openModalBtn');
     const mobileFab = document.getElementById('mobile-fab');
     const scheduleForm = document.getElementById('scheduleForm');
@@ -1133,27 +1204,19 @@ document.addEventListener('DOMContentLoaded', () => {
     if (openModalBtn) openModalBtn.addEventListener('click', initNew);
     if (mobileFab) mobileFab.addEventListener('click', initNew);
 
-    // 保存処理を完全統合（アイコンを含めて確実に schedules と localStorage に書き込む）
     if (scheduleForm) {
         scheduleForm.addEventListener('submit', (e) => {
             e.preventDefault();
-            e.stopImmediatePropagation(); // 既存の古いsubmitリスナーとの競合を完全に防止
+            e.stopImmediatePropagation();
 
-            const titleInput = document.getElementById('scheduleTitle');
-            const startTimeInput = document.getElementById('startTime');
-            const endTimeInput = document.getElementById('endTime');
-            const allDayCheckbox = document.getElementById('allDayCheckbox');
-            const locationInput = document.getElementById('scheduleLocation');
-            const descInput = document.getElementById('scheduleDescription');
-
-            const title = titleInput ? titleInput.value.trim() : '';
+            const title = (document.getElementById('scheduleTitle')?.value || '').trim();
             if (!title) return;
 
-            const start = startTimeInput ? startTimeInput.value : '';
-            const end = endTimeInput ? endTimeInput.value : '';
-            const isAllDay = allDayCheckbox ? allDayCheckbox.checked : false;
-            const location = locationInput ? locationInput.value.trim() : '';
-            const desc = descInput ? descInput.value.trim() : '';
+            const start = document.getElementById('startTime')?.value || '';
+            const end = document.getElementById('endTime')?.value || '';
+            const isAllDay = document.getElementById('allDayCheckbox')?.checked || false;
+            const location = (document.getElementById('scheduleLocation')?.value || '').trim();
+            const desc = (document.getElementById('scheduleDescription')?.value || '').trim();
 
             // 保存先の日付キー（YYYY-M-D）を決定
             let targetDateKey = selected;
@@ -1170,7 +1233,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            // テキストの組み立て（選択されたアイコンがあれば先頭に付与）
+            // 保存文字列の組み立て
             let planText = '';
             if (selectedIconFile) {
                 planText += `[icon:${selectedIconFile}] `;
@@ -1218,11 +1281,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 cur.setMonth(targetM - 1);
             }
 
-            // 確実にローカルストレージへ保存
             localStorage.setItem(STORAGE_KEY, JSON.stringify(schedules));
             editingPlanIndex = null;
 
-            // モーダルを閉じて再描画
             const overlay = document.getElementById('calendarModalOverlay');
             if (overlay) overlay.style.display = 'none';
             scheduleForm.reset();
@@ -1234,7 +1295,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// 既存予定の編集モーダル起動（登録済みアイコンを復元して選択状態にする）
+// 既存予定の編集モーダル起動
 const prevOpenEditModal = openEditModal;
 openEditModal = function(index) {
     const list = schedules[selected] || [];
@@ -1258,28 +1319,279 @@ openMobileAddModal = function() {
     setupIconSelectorUI('');
 };
 
-// 予定一覧の描画（縮小アイコン付き）
+// 予定一覧の描画（Googleカレンダー風レイアウト）
 renderList = function() {
     const list = schedules[selected] || [];
     document.getElementById('plan-list').innerHTML = list.length === 0
         ? "<p style='color:#999;font-size:13px;'>予定はありません</p>"
         : list.map((p, i) => `
-            <div class="list-item" style="cursor:pointer;">
-                <span onclick="openEditModal(${i})" style="flex:1; display:flex; align-items:center; gap:8px;">
-                    ${formatPlanWithIcon(p, 'list-plan-icon')}
-                </span>
+            <div class="list-item gcal-list-card" style="cursor:pointer;">
+                <div onclick="openEditModal(${i})" style="flex:1; min-width:0;">
+                    ${formatGoogleStylePlan(p, true)}
+                </div>
                 <button style="color:red;border:none;background:none;cursor:pointer;font-weight:bold;padding:0 5px;" onclick="delPlan(${i}); event.stopPropagation();">×</button>
             </div>
           `).join('');
 };
 
-// カレンダーマス内の予定表示（縮小アイコン付き）
+// カレンダーマス内の予定表示（Googleカレンダー風：開始時刻 + タイトル）
 const prevDraw = draw;
 draw = function() {
     prevDraw();
     document.querySelectorAll('.plan-container .plan-item').forEach(el => {
-        el.innerHTML = formatPlanWithIcon(el.textContent, 'cell-plan-icon');
+        el.innerHTML = formatGoogleStylePlan(el.textContent, false);
     });
 };
 
 render(false);
+
+// ==========================================================================
+// CSVインポート確実実行版（HTMLの書き方を問わずファイル選択で即実行）
+// ==========================================================================
+
+function handleCsvFileObject(file, inputElement) {
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const rawContent = String(e.target.result || '').replace(/^\uFEFF/, '');
+        const rows = parseCSVRows(rawContent);
+        if (rows.length === 0) {
+            alert('CSVファイルの中身が空です。');
+            return;
+        }
+
+        const firstRow = rows.at(0) || new Array();
+        const isGoogleFormat = firstRow.some(col => {
+            const c = col.trim().toLowerCase();
+            return c === 'subject' || c === '予定の件名' || c === '件名';
+        });
+        const startIndex = isGoogleFormat ? 1 : 0;
+
+        const normalizePlanForDupCheck = (raw) => {
+            let s = String(raw || '').trim();
+            s = s.replace(/^\[icon:.*?\]\s*/, '');
+            s = s.replace(/^[a-zA-Z0-9_-]+\s+/, '');
+            s = s.replace(/^\[(\d{1,2}:\d{2})～\1\]\s*/, '$1 ');
+            s = s.replace(/^\[(\d{1,2}:\d{2})～(\d{1,2}:\d{2})\]\s*/, '$1-$2 ');
+            s = s.replace(/^\[終日\]\s*/, '');
+            return s.replace(/\s+/g, ' ').trim();
+        };
+
+        const addPlanIfNotDuplicate = (dateKey, planText) => {
+            if (!schedules[dateKey]) {
+                schedules[dateKey] = new Array();
+            }
+            const existingList = schedules[dateKey];
+            const newNorm = normalizePlanForDupCheck(planText);
+
+            const isDuplicate = existingList.some(existing => {
+                if (existing === planText) return true;
+                return normalizePlanForDupCheck(existing) === newNorm;
+            });
+
+            if (isDuplicate) return false;
+            existingList.push(planText);
+            return true;
+        };
+
+        let importedCount = 0;
+        let duplicateCount = 0;
+        let skippedDetails = new Array();
+
+        for (let i = startIndex; i < rows.length; i++) {
+            const cols = rows.at(i);
+            if (!cols || cols.every(c => !String(c || '').trim())) continue;
+
+            if (isGoogleFormat) {
+                let subject = (cols.at(0) || '').trim();
+                const startDateStr = (cols.at(1) || '').trim();
+                const startTime = (cols.at(2) || '').trim();
+                const endDateStr = (cols.at(3) || '').trim() || startDateStr;
+                const endTime = (cols.at(4) || '').trim();
+                const allDayFlag = (cols.at(5) || '').trim().toLowerCase();
+                let description = (cols.at(6) || '').trim();
+                const location = (cols.at(7) || '').trim();
+
+                if (!startDateStr) {
+                    skippedDetails.push(`${i + 1}行目: 開始日が空です`);
+                    continue;
+                }
+
+                const parseFlexibleDate = (dStr) => {
+                    const nums = dStr.split(/[^0-9]+/).filter(Boolean).map(Number);
+                    if (nums.length < 3) return null;
+                    let y, m, d;
+                    if (nums.at(0) > 1000) {
+                        y = nums.at(0);
+                        m = nums.at(1);
+                        d = nums.at(2);
+                    } else {
+                        m = nums.at(0);
+                        d = nums.at(1);
+                        y = nums.at(2);
+                    }
+                    if (!y || !m || !d) return null;
+                    return new Date(y, m - 1, d);
+                };
+
+                const startDateObj = parseFlexibleDate(startDateStr);
+                const endDateObj = parseFlexibleDate(endDateStr) || startDateObj;
+
+                if (!startDateObj || isNaN(startDateObj.getTime())) {
+                    skippedDetails.push(`${i + 1}行目: 日付形式が不正です (${startDateStr})`);
+                    continue;
+                }
+
+                let iconPrefix = '';
+                const iconMatch = description.match(/^\[icon:(.*?)\]\s*/);
+                if (iconMatch) {
+                    iconPrefix = `[icon:${iconMatch.at(1)}] `;
+                    description = description.replace(iconMatch.at(0), '').trim();
+                }
+
+                if (!subject) {
+                    subject = description || '(無題)';
+                }
+
+                let timePrefix = '';
+                if (allDayFlag === 'true' || allDayFlag === '1' || allDayFlag === 'yes') {
+                    timePrefix = '[終日] ';
+                } else if (startTime) {
+                    const sParts = startTime.split(':');
+                    const sTime = sParts.length >= 2 ? `${sParts.at(0).padStart(2, '0')}:${sParts.at(1).padStart(2, '0')}` : startTime;
+                    let eTime = sTime;
+                    if (endTime) {
+                        const eParts = endTime.split(':');
+                        eTime = eParts.length >= 2 ? `${eParts.at(0).padStart(2, '0')}:${eParts.at(1).padStart(2, '0')}` : endTime;
+                    }
+                    timePrefix = `[${sTime}～${eTime}] `;
+                }
+
+                let planText = `${iconPrefix}${timePrefix}${subject}`;
+                if (location) planText += ` @${location}`;
+                if (description && subject !== description) planText += ` (${description})`;
+
+                const cursor = new Date(startDateObj.getTime());
+                const limitDate = endDateObj >= startDateObj ? endDateObj : startDateObj;
+                let safetyCounter = 0;
+
+                while (cursor <= limitDate && safetyCounter < 366) {
+                    const dateKey = `${cursor.getFullYear()}-${cursor.getMonth() + 1}-${cursor.getDate()}`;
+                    if (addPlanIfNotDuplicate(dateKey, planText)) {
+                        importedCount++;
+                    } else {
+                        duplicateCount++;
+                    }
+                    cursor.setDate(cursor.getDate() + 1);
+                    safetyCounter++;
+                }
+            } else {
+                const y = parseInt(String(cols.at(0) || '').replace(/\D/g, ''), 10);
+                const m = parseInt(String(cols.at(1) || '').replace(/\D/g, ''), 10);
+                const d = parseInt(String(cols.at(2) || '').replace(/\D/g, ''), 10);
+                const content = (cols.at(3) || '').trim();
+                if (!y || !m || !d || !content) {
+                    skippedDetails.push(`${i + 1}行目: 旧形式のデータが不足しています`);
+                    continue;
+                }
+
+                const dateKey = `${y}-${m}-${d}`;
+                if (addPlanIfNotDuplicate(dateKey, content)) {
+                    importedCount++;
+                } else {
+                    duplicateCount++;
+                }
+            }
+        }
+
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(schedules));
+        if (typeof render === 'function') {
+            render(true);
+        }
+
+        let msg = `${importedCount}件の予定をインポートしました。`;
+        if (duplicateCount > 0) {
+            msg += `\n（重複スキップ: ${duplicateCount}件）`;
+        }
+        if (skippedDetails.length > 0) {
+            msg += `\n\n【エラー等でスキップされた行 (${skippedDetails.length}件)】\n` + skippedDetails.slice(0, 10).join('\n');
+        }
+        alert(msg);
+        if (inputElement) inputElement.value = '';
+    };
+
+    reader.readAsText(file, 'UTF-8');
+}
+
+function parseCSVRows(csvText) {
+    const rows = new Array();
+    let currentRow = new Array();
+    let currentCell = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < csvText.length; i++) {
+        const ch = csvText.charAt(i);
+        const nextCh = csvText.charAt(i + 1);
+
+        if (inQuotes) {
+            if (ch === '"' && nextCh === '"') {
+                currentCell += '"';
+                i++;
+            } else if (ch === '"') {
+                inQuotes = false;
+            } else {
+                currentCell += ch;
+            }
+        } else {
+            if (ch === '"') {
+                inQuotes = true;
+            } else if (ch === ',') {
+                currentRow.push(currentCell);
+                currentCell = '';
+            } else if (ch === '\r' && nextCh === '\n') {
+                currentRow.push(currentCell);
+                rows.push(currentRow);
+                currentRow = new Array();
+                currentCell = '';
+                i++;
+            } else if (ch === '\n' || ch === '\r') {
+                currentRow.push(currentCell);
+                rows.push(currentRow);
+                currentRow = new Array();
+                currentCell = '';
+            } else {
+                currentCell += ch;
+            }
+        }
+    }
+
+    if (currentCell.length > 0 || currentRow.length > 0) {
+        currentRow.push(currentCell);
+        rows.push(currentRow);
+    }
+
+    return rows;
+}
+
+// HTML側の呼び出し方（event渡し / this渡し / 別名関数）をすべて吸収
+function importFromCSV(arg) {
+    const input = (arg && arg.target) ? arg.target : arg;
+    const file = input && input.files ? input.files.item(0) : null;
+    handleCsvFileObject(file, input);
+}
+function importCSV(arg) {
+    importFromCSV(arg);
+}
+
+// 画面上のすべての <input type="file"> のファイル選択を直接検知して実行
+document.addEventListener('change', function(e) {
+    const target = e.target;
+    if (target && target.tagName === 'INPUT' && target.type === 'file') {
+        const file = target.files ? target.files.item(0) : null;
+        if (file && file.name.toLowerCase().endsWith('.csv')) {
+            e.stopImmediatePropagation();
+            handleCsvFileObject(file, target);
+        }
+    }
+}, true);

@@ -1047,3 +1047,83 @@ body {
         height: 20px;
     }
 }
+/* ==========================================================================
+   Googleカレンダー風 予定一覧・マス内スタイル
+   ========================================================================== */
+
+/* 予定一覧のカードデザイン（Googleカレンダー風の左青バー） */
+.gcal-list-card {
+    border-left: 5px solid #1a73e8 !important;
+    background: #f8f9fa !important;
+    border-radius: 6px !important;
+    padding: 10px 12px !important;
+    margin-bottom: 8px !important;
+    align-items: center !important;
+}
+
+.gcal-item-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.gcal-main-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.gcal-title-block {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px;
+}
+
+/* 時間表示（10:00 - 11:30） */
+.gcal-time-text {
+    color: #1a73e8;
+    font-weight: bold;
+    font-size: 0.85em;
+}
+
+/* 終日バッジ */
+.gcal-time-badge {
+    background: #1a73e8;
+    color: #ffffff;
+    font-size: 0.7em;
+    font-weight: bold;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+.gcal-title-text {
+    font-weight: bold;
+    color: #202124;
+}
+
+/* 場所・説明メモのサブ行 */
+.gcal-sub-info {
+    font-size: 0.75em;
+    color: #5f6368;
+    padding-left: 2px;
+}
+
+/* カレンダーマス内の時間表示 */
+.gcal-cell-time {
+    font-weight: bold;
+    opacity: 0.9;
+}
+
+/* スマホ画面（768px以下）でのGoogleカレンダー風カード調整 */
+@media screen and (max-width: 768px) {
+    .gcal-list-card {
+        border-left-width: 8px !important;
+        padding: 16px 14px !important;
+        margin-bottom: 14px !important;
+    }
+    .gcal-sub-info {
+        font-size: 26px !important;
+        margin-top: 4px;
+    }
+}
