@@ -9,8 +9,10 @@ let temps = {};
 let metaAbort = null;
 
 let pickerYear = cur.getFullYear();
-let editingPlanIndex = null; // 編集中の予定インデックス（nullは新規追加）
-let selectedIconFile = '';   // 選択中のアイコンファイル名
+let editingPlanIndex = null;
+let selectedIconFile = '';
+let tempSelectedIconFile = '';
+let iconCurrentPage = 1;
 
 // ==========================================================================
 // 1. 日付・祝日・気温・六曜ユーティリティ
@@ -29,8 +31,8 @@ function isoDate(y, m, d) {
 }
 
 function toDateKeyFromIso(iso) {
-    const [y, m, d] = iso.split('-').map(Number);
-    return dateKey(y, m, d);
+    const parts = iso.split('-').map(Number);
+    return dateKey(parts.at(0), parts.at(1), parts.at(2));
 }
 
 function tokyoToday() {
@@ -96,7 +98,8 @@ function computeJapaneseHolidays(y) {
     const lastDay = (m) => new Date(y, m, 0).getDate();
 
     Object.keys(raw).forEach((k) => {
-        const [yy, mm, dd] = k.split('-').map(Number);
+        const parts = k.split('-').map(Number);
+        const yy = parts.at(0), mm = parts.at(1), dd = parts.at(2);
         if (new Date(yy, mm - 1, dd).getDay() !== 0) return;
         let m = mm, d = dd + 1;
         while (d > lastDay(m)) {
@@ -155,10 +158,10 @@ async function fetchTemps(y, monthIndex, signal) {
     const bust = Date.now();
     const qs = `latitude=${NAGOYA.latitude}&longitude=${NAGOYA.longitude}&daily=temperature_2m_max,temperature_2m_min&timezone=Asia/Tokyo&start_date=${start}&end_date=${end}&t=${bust}`;
 
-    const urls = [
+    const urls = Array.of(
         `https://open-meteo.com{qs}`,
         `https://open-meteo.com{qs}`
-    ];
+    );
 
     let data = null;
     for (const url of urls) {
@@ -178,10 +181,11 @@ async function fetchTemps(y, monthIndex, signal) {
 
     const out = {};
     data.daily.time.forEach((iso, i) => {
-        const [yy, mm, dd] = iso.split('-').map(Number);
+        const parts = iso.split('-').map(Number);
+        const yy = parts.at(0), mm = parts.at(1), dd = parts.at(2);
         if (!isBeforeYesterdayInclusive(yy, mm, dd, yest)) return;
-        const maxT = data.daily.temperature_2m_max[i];
-        const minT = data.daily.temperature_2m_min[i];
+        const maxT = data.daily.temperature_2m_max.at(i);
+        const minT = data.daily.temperature_2m_min.at(i);
         if (maxT == null || minT == null) return;
         out[toDateKeyFromIso(iso)] = { max: Number(maxT).toFixed(1), min: Number(minT).toFixed(1) };
     });
@@ -199,14 +203,14 @@ async function refreshMeta() {
     draw();
 
     try {
-        const [h, t] = await Promise.all([
+        const results = await Promise.all(Array.of(
             fetchHolidays(y, signal).catch(() => holidays),
             fetchTemps(y, m, signal).catch(() => ({}))
-        ]);
+        ));
         if (signal.aborted) return;
         if (cur.getFullYear() !== y || cur.getMonth() !== m) return;
-        holidays = h;
-        temps = t;
+        holidays = results.at(0);
+        temps = results.at(1);
         draw();
     } catch (e) {
         if (e.name === 'AbortError') return;
@@ -220,21 +224,51 @@ function tempHtml(k) {
 }
 
 function getRokuyo(year, month, day) {
-    const rokuyoList = ["大安", "赤口", "先勝", "友引", "先負", "仏滅"];
+    const rokuyoList = Array.of("大安", "赤口", "先勝", "友引", "先負", "仏滅");
     const list2026 = "0,2,2,3,5,0,1,3,4,5,1,2";
     const list2027 = "3,5,5,0,1,3,4,5,0,1,3,4";
 
     const csv = year === 2027 ? list2027 : list2026;
     const offsets = csv.split(",");
-    const yearOffset = Number(offsets[month - 1] || 0);
+    const yearOffset = Number(offsets.at(month - 1) || 0);
     const index = (day + yearOffset) % 6;
 
-    return rokuyoList[index];
+    return rokuyoList.at(index);
 }
 
 // ==========================================================================
-// 2. 予定の書式整形（アイコン・Googleカレンダー風表示）
+// 2. カスタムスタンプ管理 ＆ 予定の書式整形
 // ==========================================================================
+
+function getFolderIcons() {
+    const candidates = Array.of(
+        window.CALENDAR_ICONS,
+        window.ICONS,
+        window.icons,
+        window.iconList,
+        window.iconFiles,
+        window.STAMPS,
+        window.stamps
+    );
+    const found = candidates.find(item => Array.isArray(item) && item.length > 0);
+    if (!found) return new Array();
+
+    return found.map(item => {
+        if (typeof item === 'string') return item;
+        if (item && typeof item === 'object') {
+            return item.file || item.src || item.name || item.path || '';
+        }
+        return '';
+    }).filter(Boolean);
+}
+
+function resolveStampSrc(iconValue) {
+    if (!iconValue) return '';
+    if (iconValue.startsWith('data:image/') || iconValue.startsWith('http') || iconValue.startsWith('image/') || iconValue.startsWith('./image/')) {
+        return iconValue;
+    }
+    return `image/${encodeURIComponent(iconValue)}`;
+}
 
 function formatGoogleStylePlan(rawText, isListMode = true) {
     let text = rawText || '';
@@ -243,10 +277,14 @@ function formatGoogleStylePlan(rawText, isListMode = true) {
     let iconHtml = '';
     const iconMatch = text.match(/^\[icon:(.*?)\]\s*/);
     if (iconMatch) {
-        const fileName = iconMatch[1];
-        const sizeClass = isListMode ? 'list-plan-icon' : 'cell-plan-icon';
-        iconHtml = `<img src="image/${encodeURIComponent(fileName)}" alt="" class="${sizeClass}">`;
-        text = text.replace(iconMatch[0], '');
+        const matchedAll = iconMatch.at(0);
+        const iconVal = iconMatch.at(1);
+        const src = resolveStampSrc(iconVal);
+        if (src) {
+            const sizeClass = isListMode ? 'list-plan-icon' : 'cell-plan-icon';
+            iconHtml = `<img src="${src}" alt="" class="${sizeClass}">`;
+        }
+        text = text.replace(matchedAll, '');
     }
 
     // 2. 時間・終日の抽出
@@ -257,9 +295,10 @@ function formatGoogleStylePlan(rawText, isListMode = true) {
     } else {
         const timeMatch = text.match(/^\[(\d{1,2}:\d{2})～(\d{1,2}:\d{2})?\]\s*/);
         if (timeMatch) {
-            const start = timeMatch[1];
-            const end = timeMatch[2] || '';
-            text = text.replace(timeMatch[0], '');
+            const matchedAll = timeMatch.at(0);
+            const start = timeMatch.at(1);
+            const end = timeMatch.at(2) || '';
+            text = text.replace(matchedAll, '');
             if (isListMode) {
                 timeLabel = `<span class="gcal-time-text">${end ? `${start} - ${end}` : start}</span>`;
             } else {
@@ -272,15 +311,15 @@ function formatGoogleStylePlan(rawText, isListMode = true) {
     let desc = '';
     const descMatch = text.match(/\s+\(([^()]*)\)$/);
     if (descMatch) {
-        desc = descMatch[1];
-        text = text.replace(descMatch[0], '');
+        desc = descMatch.at(1);
+        text = text.replace(descMatch.at(0), '');
     }
 
     let location = '';
     const locMatch = text.match(/\s+@(.*)$/);
     if (locMatch) {
-        location = locMatch[1];
-        text = text.replace(locMatch[0], '');
+        location = locMatch.at(1);
+        text = text.replace(locMatch.at(0), '');
     }
 
     const title = text.trim();
@@ -289,8 +328,9 @@ function formatGoogleStylePlan(rawText, isListMode = true) {
         return `${iconHtml}${timeLabel}<span class="gcal-cell-title">${title}</span>`;
     }
 
-    const locHtml = location ? `<div class="gcal-sub-info">������ ${location}</div>` : '';
-    const descHtml = desc ? `<div class="gcal-sub-info gcal-desc">������ ${desc}</div>` : '';
+    // 場所とメモを文字化けしないコードで指定
+    const locHtml = location ? `<div class="gcal-sub-info">\uD83D\uDCCD ${location}</div>` : '';
+    const descHtml = desc ? `<div class="gcal-sub-info gcal-desc">\uD83D\uDCDD ${desc}</div>` : '';
 
     return `
         <div class="gcal-item-wrapper">
@@ -331,7 +371,8 @@ function draw() {
         else if (w === 6) c = 'day-sat';
         if (k === todayKey) c += ' day-today';
 
-        const plansHtml = (schedules[k] || [])
+        const daySchedules = schedules[k] || new Array();
+        const plansHtml = daySchedules
             .map((p) => `<div class="plan-item">${formatGoogleStylePlan(p, false)}</div>`)
             .join('');
         const hHtml = h ? `<span class="holiday-name">${h}</span>` : '';
@@ -344,7 +385,7 @@ function draw() {
             <div class="day-cell ${c} ${selected === k ? 'selected' : ''}" onclick="selectDate('${k}')">
                 <div class="cell-top-wrapper">
                     <div class="cell-top">
-                        <span style="font-size:20px; font-weight:bold; color:${w === 0 || h ? 'red' : w === 6 ? 'blue' : ''};">${d}</span>
+                        <span class="day-num" style="font-weight:bold; color:${w === 0 || h ? 'red' : w === 6 ? 'blue' : ''};">${d}</span>
                         ${rokuyoHtml}
                     </div>
                     <div class="meta-info">
@@ -407,31 +448,33 @@ function goToday() {
 }
 
 function renderList() {
-    const list = schedules[selected] || [];
+    const list = schedules[selected] || new Array();
     document.getElementById('plan-list').innerHTML = list.length === 0
-        ? "<p style='color:#999;font-size:13px;'>予定はありません</p>"
+        ? "<p class='empty-plan-msg'>予定はありません</p>"
         : list.map((p, i) => `
             <div class="list-item gcal-list-card" style="cursor:pointer;">
                 <div onclick="openEditModal(${i})" style="flex:1; min-width:0;">
                     ${formatGoogleStylePlan(p, true)}
                 </div>
-                <button style="color:red;border:none;background:none;cursor:pointer;font-weight:bold;padding:0 5px;" onclick="delPlan(${i}); event.stopPropagation();">×</button>
+                <button type="button" class="del-plan-btn" onclick="delPlan(${i}); event.stopPropagation();" title="削除">×</button>
             </div>
           `).join('');
 }
 
-function addPlan() {
-    const input = document.getElementById('plan-input');
-    const t = input.value.trim();
-    if (!t) return;
-    if (!schedules[selected]) schedules[selected] = [];
-    schedules[selected].push(t);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(schedules));
-    input.value = '';
-    render(false);
-}
-
 function delPlan(i) {
+    const list = schedules[selected] || new Array();
+    const targetPlan = list.at(i);
+    if (!targetPlan) return;
+
+    const cleanTitle = targetPlan
+        .replace(/^\[icon:.*?\]\s*/, '')
+        .replace(/^\[終日\]\s*/, '')
+        .replace(/^\[\d{1,2}:\d{2}～\d{0,2}:?\d{0,2}\]\s*/, '');
+
+    if (!confirm(`「${cleanTitle}」を削除してもよろしいですか？`)) {
+        return;
+    }
+
     schedules[selected].splice(i, 1);
     if (schedules[selected].length === 0) delete schedules[selected];
     localStorage.setItem(STORAGE_KEY, JSON.stringify(schedules));
@@ -439,7 +482,7 @@ function delPlan(i) {
 }
 
 // ==========================================================================
-// 4. 年月ピッカー・スマホ設定モーダル
+// 4. 年月ピッカー・全画面設定モーダル（PC・スマホ共通）
 // ==========================================================================
 
 function toggleYearMonthPicker() {
@@ -467,64 +510,144 @@ function selectPickerMonth(m) {
     render(true);
 }
 
-function toggleMobileSettings() {
-    const modal = document.getElementById('mobile-settings-modal');
+function toggleSettingsModal() {
+    const modal = document.getElementById('settings-modal');
     if (!modal) return;
     modal.style.display = modal.style.display === 'none' ? 'flex' : 'none';
 }
 
 // ==========================================================================
-// 5. アイコン選択UI ＆ 予定追加・編集モーダル（完全統合版・1本化）
+// 5. スタンプ（アイコン）別画面選択UI ＆ 予定追加・編集モーダル
 // ==========================================================================
 
-function setupIconSelectorUI(currentIcon = '') {
-    selectedIconFile = currentIcon;
-    const iconList = Array.isArray(window.CALENDAR_ICONS) ? [...window.CALENDAR_ICONS] : [];
-
-    if (currentIcon && !iconList.includes(currentIcon)) {
-        iconList.push(currentIcon);
+function updateStampTriggerButton() {
+    const btn = document.getElementById('stampTriggerBtn');
+    if (!btn) return;
+    const src = resolveStampSrc(selectedIconFile);
+    if (src) {
+        btn.innerHTML = `<img src="${src}" alt="スタンプ">`;
+        btn.classList.add('has-icon');
+    } else {
+        btn.innerHTML = 'スタンプ';
+        btn.classList.remove('has-icon');
     }
+}
 
-    const form = document.getElementById('scheduleForm');
-    if (!form) return;
+function getIconsPerPage() {
+    // PC・スマホともに1画面40個表示（「なし」ボタン含む）
+    return 40;
+}
 
-    let group = document.getElementById('icon-selector-group');
-    if (!group) {
-        group = document.createElement('div');
-        group.id = 'icon-selector-group';
-        group.className = 'form-group';
-        const firstGroup = form.querySelector('.form-group');
-        if (firstGroup && firstGroup.nextSibling) {
-            form.insertBefore(group, firstGroup.nextSibling);
-        } else {
-            form.insertBefore(group, form.firstChild);
+function openIconPickerView() {
+    tempSelectedIconFile = selectedIconFile;
+    iconCurrentPage = 1;
+
+    document.getElementById('scheduleFormView').style.display = 'none';
+    document.getElementById('iconPickerView').style.display = 'block';
+    renderIconPickerPage();
+}
+
+function renderIconPickerPage() {
+    const grid = document.getElementById('iconPickerGrid');
+    const pagination = document.getElementById('iconPagination');
+    const indicator = document.getElementById('iconPageIndicator');
+    if (!grid) return;
+
+    const folderIcons = getFolderIcons();
+    const allItems = new Array({ type: 'none', id: '', src: '' });
+    folderIcons.forEach(fileName => {
+        allItems.push({ type: 'icon', id: fileName, src: resolveStampSrc(fileName) });
+    });
+
+    const perPage = getIconsPerPage();
+    const totalPages = Math.max(1, Math.ceil(allItems.length / perPage));
+    if (iconCurrentPage > totalPages) iconCurrentPage = totalPages;
+    if (iconCurrentPage < 1) iconCurrentPage = 1;
+
+    const startIdx = (iconCurrentPage - 1) * perPage;
+    const pageItems = allItems.slice(startIdx, startIdx + perPage);
+
+    grid.innerHTML = pageItems.map(item => {
+        const isSel = tempSelectedIconFile === item.id ? 'selected' : '';
+        if (item.type === 'none') {
+            return `
+                <button type="button" class="icon-choice-btn icon-none-btn ${isSel}" onclick="selectTempIcon('')">
+                    なし
+                </button>
+            `;
         }
-    }
-
-    const noneSelected = selectedIconFile === '' ? 'selected' : '';
-    const itemsHtml = iconList.map(file => {
-        const isSel = selectedIconFile === file ? 'selected' : '';
+        const safeId = item.id.replace(/'/g, "\\'");
         return `
-            <button type="button" class="icon-choice-btn ${isSel}" data-icon="${file}" onclick="selectScheduleIcon('${file.replace(/'/g, "\\'")}')">
-                <img src="image/${encodeURIComponent(file)}" alt="${file}">
+            <button type="button" class="icon-choice-btn ${isSel}" onclick="selectTempIcon('${safeId}')">
+                <img src="${item.src}" alt="スタンプ">
             </button>
         `;
     }).join('');
 
-    group.innerHTML = `
-        <label>アイコン</label>
-        <div class="icon-picker-grid">
-            <button type="button" class="icon-choice-btn icon-none-btn ${noneSelected}" data-icon="" onclick="selectScheduleIcon('')">なし</button>
-            ${itemsHtml}
-        </div>
-    `;
+    if (totalPages > 1) {
+        pagination.style.display = 'flex';
+        indicator.innerText = `(${iconCurrentPage}/${totalPages})`;
+    } else {
+        pagination.style.display = 'none';
+    }
 }
 
-function selectScheduleIcon(fileName) {
-    selectedIconFile = fileName;
-    document.querySelectorAll('.icon-choice-btn').forEach(btn => {
-        btn.classList.toggle('selected', btn.dataset.icon === fileName);
-    });
+function selectTempIcon(iconId) {
+    tempSelectedIconFile = iconId;
+    renderIconPickerPage();
+}
+
+function changeIconPage(delta) {
+    const totalItems = getFolderIcons().length + 1;
+    const totalPages = Math.max(1, Math.ceil(totalItems / getIconsPerPage()));
+    iconCurrentPage += delta;
+    if (iconCurrentPage < 1) iconCurrentPage = totalPages;
+    if (iconCurrentPage > totalPages) iconCurrentPage = 1;
+    renderIconPickerPage();
+}
+
+function confirmIconSelection() {
+    selectedIconFile = tempSelectedIconFile;
+    updateStampTriggerButton();
+    document.getElementById('iconPickerView').style.display = 'none';
+    document.getElementById('scheduleFormView').style.display = 'block';
+}
+
+function cancelIconSelection() {
+    document.getElementById('iconPickerView').style.display = 'none';
+    document.getElementById('scheduleFormView').style.display = 'block';
+}
+
+function getNearestHourDefaults() {
+    const now = new Date();
+    let nextHour = now.getHours() + 1;
+    let endHour = nextHour + 1;
+
+    if (nextHour >= 24) {
+        nextHour = 23;
+        endHour = 23;
+    } else if (endHour >= 24) {
+        endHour = 23;
+    }
+
+    return {
+        startStr: `${pad(nextHour)}:00`,
+        endStr: nextHour === 23 ? '23:59' : `${pad(endHour)}:00`
+    };
+}
+
+function updateAllDayState(isAllDay) {
+    const startTimeInput = document.getElementById('startTime');
+    const endTimeInput = document.getElementById('endTime');
+    if (!startTimeInput || !endTimeInput) return;
+
+    if (isAllDay) {
+        endTimeInput.disabled = true;
+        endTimeInput.classList.add('input-disabled-gray');
+    } else {
+        endTimeInput.disabled = false;
+        endTimeInput.classList.remove('input-disabled-gray');
+    }
 }
 
 function initModalDateTimeFields(isAllDay, startTimePart = '', endTimePart = '') {
@@ -532,8 +655,10 @@ function initModalDateTimeFields(isAllDay, startTimePart = '', endTimePart = '')
     const endTimeInput = document.getElementById('endTime');
     if (!startTimeInput || !endTimeInput || !selected) return;
 
-    const [y, m, d] = selected.split('-').map(Number);
+    const parts = selected.split('-').map(Number);
+    const y = parts.at(0), m = parts.at(1), d = parts.at(2);
     const baseDateStr = `${y}-${pad(m)}-${pad(d)}`;
+    const defaults = getNearestHourDefaults();
 
     if (isAllDay) {
         startTimeInput.type = 'date';
@@ -543,16 +668,16 @@ function initModalDateTimeFields(isAllDay, startTimePart = '', endTimePart = '')
     } else {
         startTimeInput.type = 'datetime-local';
         endTimeInput.type = 'datetime-local';
-        startTimeInput.value = startTimePart ? `${baseDateStr}T${startTimePart}` : `${baseDateStr}T10:00`;
-        endTimeInput.value = endTimePart ? `${baseDateStr}T${endTimePart}` : `${baseDateStr}T11:00`;
+        startTimeInput.value = startTimePart ? `${baseDateStr}T${startTimePart}` : `${baseDateStr}T${defaults.startStr}`;
+        endTimeInput.value = endTimePart ? `${baseDateStr}T${endTimePart}` : `${baseDateStr}T${defaults.endStr}`;
     }
+
+    updateAllDayState(isAllDay);
 }
 
-/**
- * 新規予定追加モーダルを開く
- */
 function openNewScheduleModal() {
     editingPlanIndex = null;
+    selectedIconFile = '';
 
     const overlay = document.getElementById('calendarModalOverlay');
     const scheduleForm = document.getElementById('scheduleForm');
@@ -562,25 +687,20 @@ function openNewScheduleModal() {
     scheduleForm.reset();
     if (allDayCheckbox) allDayCheckbox.checked = false;
     initModalDateTimeFields(false);
-    setupIconSelectorUI('');
+    updateStampTriggerButton();
 
-    const modalTitle = overlay.querySelector('.modal-title');
+    document.getElementById('iconPickerView').style.display = 'none';
+    document.getElementById('scheduleFormView').style.display = 'block';
+
+    const modalTitle = overlay.querySelector('#scheduleFormView .modal-title');
     if (modalTitle) modalTitle.innerText = "新しい予定を追加";
 
     overlay.style.display = 'flex';
 }
 
-// 旧スマホ用関数を共通モーダルに統合
-function openMobileAddModal() {
-    openNewScheduleModal();
-}
-
-/**
- * 既存予定の編集モーダルを開く
- */
 function openEditModal(index) {
-    const list = schedules[selected] || [];
-    const rawText = list[index];
+    const list = schedules[selected] || new Array();
+    const rawText = list.at(index);
     if (!rawText) return;
 
     editingPlanIndex = index;
@@ -594,15 +714,13 @@ function openEditModal(index) {
 
     let text = rawText;
 
-    // 1. アイコンタグの切り出し
     let extractedIcon = '';
     const iconMatch = text.match(/^\[icon:(.*?)\]\s*/);
     if (iconMatch) {
-        extractedIcon = iconMatch[1];
-        text = text.replace(iconMatch[0], '').trim();
+        extractedIcon = iconMatch.at(1);
+        text = text.replace(iconMatch.at(0), '').trim();
     }
 
-    // 2. [終日] または [時間] の切り出し
     let isAllDay = false;
     let startTimePart = '';
     let endTimePart = '';
@@ -613,18 +731,17 @@ function openEditModal(index) {
     } else if (text.startsWith('[')) {
         const timeMatch = text.match(/^\[(.*?)～(.*?)\]/);
         if (timeMatch) {
-            startTimePart = timeMatch[1] ? timeMatch[1].trim() : '';
-            endTimePart = timeMatch[2] ? timeMatch[2].trim() : '';
-            text = text.replace(timeMatch[0], '').trim();
+            startTimePart = timeMatch.at(1) ? timeMatch.at(1).trim() : '';
+            endTimePart = timeMatch.at(2) ? timeMatch.at(2).trim() : '';
+            text = text.replace(timeMatch.at(0), '').trim();
         }
     }
 
-    // 3. 場所（ @場所 ）の切り出し
     let location = '';
     if (text.includes(' @')) {
         const parts = text.split(' @');
         const locDescPart = parts.pop();
-        location = locDescPart.split(' (')[0].trim();
+        location = locDescPart.split(' (').at(0).trim();
         text = parts.join(' @').trim();
 
         if (locDescPart.includes(' (')) {
@@ -632,24 +749,26 @@ function openEditModal(index) {
         }
     }
 
-    // 4. 説明（ (説明文) ）の切り出し
     let desc = '';
     const descMatch = text.match(/\(([^)]*)\)$/);
     if (descMatch) {
-        desc = descMatch[1].trim();
+        desc = descMatch.at(1).trim();
         text = text.replace(/\([^)]*\)$/, '').trim();
     }
 
-    // 入力欄へセット
+    selectedIconFile = extractedIcon;
+    updateStampTriggerButton();
+
     if (titleInput) titleInput.value = text;
     if (allDayCheckbox) allDayCheckbox.checked = isAllDay;
     initModalDateTimeFields(isAllDay, startTimePart, endTimePart);
     if (locationInput) locationInput.value = location;
     if (descInput) descInput.value = desc;
 
-    setupIconSelectorUI(extractedIcon);
+    document.getElementById('iconPickerView').style.display = 'none';
+    document.getElementById('scheduleFormView').style.display = 'block';
 
-    const modalTitle = overlay.querySelector('.modal-title');
+    const modalTitle = overlay.querySelector('#scheduleFormView .modal-title');
     if (modalTitle) modalTitle.innerText = "予定の編集";
 
     overlay.style.display = 'flex';
@@ -663,9 +782,6 @@ function closeScheduleModal() {
     if (scheduleForm) scheduleForm.reset();
 }
 
-/**
- * 予定の保存処理（新規追加・編集・日付移動・アイコン保存を1つに統合）
- */
 function handleScheduleSubmit(e) {
     e.preventDefault();
 
@@ -678,19 +794,18 @@ function handleScheduleSubmit(e) {
     const location = (document.getElementById('scheduleLocation')?.value || '').trim();
     const desc = (document.getElementById('scheduleDescription')?.value || '').trim();
 
-    // 保存先の日付キー（YYYY-M-D）を抽出
     let targetDateKey = selected;
     if (start) {
-        const datePart = start.split('T')[0];
+        const datePart = start.split('T').at(0);
         if (datePart) {
-            const [y, m, d] = datePart.split('-').map(Number);
+            const parts = datePart.split('-').map(Number);
+            const y = parts.at(0), m = parts.at(1), d = parts.at(2);
             if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
                 targetDateKey = `${y}-${m}-${d}`;
             }
         }
     }
 
-    // 保存テキスト組み立て
     let planText = '';
     if (selectedIconFile) {
         planText += `[icon:${selectedIconFile}] `;
@@ -698,8 +813,8 @@ function handleScheduleSubmit(e) {
     if (isAllDay) {
         planText += '[終日] ';
     } else {
-        const startTimePart = start.includes('T') ? start.split('T')[1] : '';
-        const endTimePart = end.includes('T') ? end.split('T')[1] : '';
+        const startTimePart = start.includes('T') ? start.split('T').at(1) : '';
+        const endTimePart = end.includes('T') ? end.split('T').at(1) : '';
         if (startTimePart) {
             const sTime = startTimePart.substring(0, 5);
             const eTime = endTimePart ? endTimePart.substring(0, 5) : '';
@@ -710,32 +825,31 @@ function handleScheduleSubmit(e) {
     if (location) planText += ` @${location}`;
     if (desc) planText += ` (${desc})`;
 
-    // 新規追加または編集の反映
     if (editingPlanIndex !== null) {
         if (targetDateKey === selected) {
-            if (!schedules[selected]) schedules[selected] = [];
-            schedules[selected][editingPlanIndex] = planText;
+            if (!schedules[selected]) schedules[selected] = new Array();
+            schedules[selected].splice(editingPlanIndex, 1, planText);
         } else {
-            if (schedules[selected] && schedules[selected][editingPlanIndex] !== undefined) {
+            if (schedules[selected] && schedules[selected].at(editingPlanIndex) !== undefined) {
                 schedules[selected].splice(editingPlanIndex, 1);
                 if (schedules[selected].length === 0) delete schedules[selected];
             }
-            if (!schedules[targetDateKey]) schedules[targetDateKey] = [];
+            if (!schedules[targetDateKey]) schedules[targetDateKey] = new Array();
             schedules[targetDateKey].push(planText);
 
             selected = targetDateKey;
-            const [targetY, targetM] = targetDateKey.split('-').map(Number);
-            cur.setFullYear(targetY);
-            cur.setMonth(targetM - 1);
+            const parts = targetDateKey.split('-').map(Number);
+            cur.setFullYear(parts.at(0));
+            cur.setMonth(parts.at(1) - 1);
         }
     } else {
-        if (!schedules[targetDateKey]) schedules[targetDateKey] = [];
+        if (!schedules[targetDateKey]) schedules[targetDateKey] = new Array();
         schedules[targetDateKey].push(planText);
 
         selected = targetDateKey;
-        const [targetY, targetM] = targetDateKey.split('-').map(Number);
-        cur.setFullYear(targetY);
-        cur.setMonth(targetM - 1);
+        const parts = targetDateKey.split('-').map(Number);
+        cur.setFullYear(parts.at(0));
+        cur.setMonth(parts.at(1) - 1);
     }
 
     localStorage.setItem(STORAGE_KEY, JSON.stringify(schedules));
@@ -743,7 +857,6 @@ function handleScheduleSubmit(e) {
     render(true);
 }
 
-// モーダル関連イベントの初期化（1回のみ登録）
 document.addEventListener('DOMContentLoaded', () => {
     const openModalBtn = document.getElementById('openModalBtn');
     const mobileFab = document.getElementById('mobile-fab');
@@ -780,8 +893,8 @@ document.addEventListener('DOMContentLoaded', () => {
 // ==========================================================================
 
 function parseCSVRows(csvText) {
-    const rows = [];
-    let currentRow = [];
+    const rows = new Array();
+    let currentRow = new Array();
     let currentCell = '';
     let inQuotes = false;
 
@@ -807,13 +920,13 @@ function parseCSVRows(csvText) {
             } else if (ch === '\r' && nextCh === '\n') {
                 currentRow.push(currentCell);
                 rows.push(currentRow);
-                currentRow = [];
+                currentRow = new Array();
                 currentCell = '';
                 i++;
             } else if (ch === '\n' || ch === '\r') {
                 currentRow.push(currentCell);
                 rows.push(currentRow);
-                currentRow = [];
+                currentRow = new Array();
                 currentCell = '';
             } else {
                 currentCell += ch;
@@ -830,7 +943,7 @@ function parseCSVRows(csvText) {
 }
 
 function exportToCSV() {
-    const headers = [
+    const headers = Array.of(
         'Subject',
         'Start Date',
         'Start Time',
@@ -839,8 +952,8 @@ function exportToCSV() {
         'All Day Event',
         'Description',
         'Location'
-    ];
-    const rows = [headers.join(',')];
+    );
+    const rows = Array.of(headers.join(','));
 
     const escapeCsvCell = (value) => {
         const str = String(value == null ? '' : value);
@@ -851,17 +964,18 @@ function exportToCSV() {
     };
 
     const sortedKeys = Object.keys(schedules).sort((a, b) => {
-        const [ay, am, ad] = a.split('-').map(Number);
-        const [by, bm, bd] = b.split('-').map(Number);
-        return new Date(ay, am - 1, ad) - new Date(by, bm - 1, bd);
+        const ap = a.split('-').map(Number);
+        const bp = b.split('-').map(Number);
+        return new Date(ap.at(0), ap.at(1) - 1, ap.at(2)) - new Date(bp.at(0), bp.at(1) - 1, bp.at(2));
     });
 
     sortedKeys.forEach(dKey => {
-        const [y, m, d] = dKey.split('-').map(Number);
+        const parts = dKey.split('-').map(Number);
+        const y = parts.at(0), m = parts.at(1), d = parts.at(2);
         if (!y || !m || !d) return;
 
         const formattedDate = `${pad(m)}/${pad(d)}/${y}`;
-        const dayPlans = schedules[dKey] || [];
+        const dayPlans = schedules[dKey] || new Array();
 
         dayPlans.forEach(rawText => {
             let text = String(rawText || '');
@@ -869,14 +983,14 @@ function exportToCSV() {
 
             const newIconMatch = text.match(/^\[icon:(.*?)\]\s*/);
             if (newIconMatch) {
-                iconTag = `[icon:${newIconMatch[1]}]`;
-                text = text.replace(newIconMatch[0], '');
+                iconTag = `[icon:${newIconMatch.at(1)}]`;
+                text = text.replace(newIconMatch.at(0), '');
             } else {
                 const oldIconMatch = text.match(/^([a-zA-Z0-9_-]+)\s+/);
                 if (oldIconMatch) {
-                    const iconName = oldIconMatch[1];
+                    const iconName = oldIconMatch.at(1);
                     iconTag = iconName.includes('.') ? `[icon:${iconName}]` : `[icon:${iconName}.png]`;
-                    text = text.replace(oldIconMatch[0], '');
+                    text = text.replace(oldIconMatch.at(0), '');
                 }
             }
 
@@ -892,13 +1006,13 @@ function exportToCSV() {
                 const plainTimeMatch = text.match(/^(\d{1,2}:\d{2})\s+/);
 
                 if (bracketTimeMatch) {
-                    startTime = bracketTimeMatch[1];
-                    endTime = bracketTimeMatch[2] || bracketTimeMatch[1];
-                    text = text.replace(bracketTimeMatch[0], '');
+                    startTime = bracketTimeMatch.at(1);
+                    endTime = bracketTimeMatch.at(2) || bracketTimeMatch.at(1);
+                    text = text.replace(bracketTimeMatch.at(0), '');
                 } else if (plainTimeMatch) {
-                    startTime = plainTimeMatch[1];
-                    endTime = plainTimeMatch[1];
-                    text = text.replace(plainTimeMatch[0], '');
+                    startTime = plainTimeMatch.at(1);
+                    endTime = plainTimeMatch.at(1);
+                    text = text.replace(plainTimeMatch.at(0), '');
                 } else {
                     isAllDay = 'True';
                 }
@@ -907,15 +1021,15 @@ function exportToCSV() {
             let description = '';
             const descMatch = text.match(/\s+\(([^()]*)\)$/);
             if (descMatch) {
-                description = descMatch[1];
-                text = text.replace(descMatch[0], '');
+                description = descMatch.at(1);
+                text = text.replace(descMatch.at(0), '');
             }
 
             let location = '';
             const locMatch = text.match(/\s+@(.*)$/);
             if (locMatch) {
-                location = locMatch[1];
-                text = text.replace(locMatch[0], '');
+                location = locMatch.at(1);
+                text = text.replace(locMatch.at(0), '');
             }
 
             if (iconTag) {
@@ -924,7 +1038,7 @@ function exportToCSV() {
 
             const subject = text.trim();
 
-            rows.push([
+            rows.push(Array.of(
                 escapeCsvCell(subject),
                 escapeCsvCell(formattedDate),
                 escapeCsvCell(startTime),
@@ -933,12 +1047,12 @@ function exportToCSV() {
                 escapeCsvCell(isAllDay),
                 escapeCsvCell(description),
                 escapeCsvCell(location)
-            ].join(','));
+            ).join(','));
         });
     });
 
     const csvContent = '\uFEFF' + rows.join('\r\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob(Array.of(csvContent), { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     if (link.download !== undefined) {
         const url = URL.createObjectURL(blob);
@@ -964,7 +1078,7 @@ function handleCsvFileObject(file, inputElement) {
             return;
         }
 
-        const firstRow = rows[0] || [];
+        const firstRow = rows.at(0) || new Array();
         const isGoogleFormat = firstRow.some(col => {
             const c = col.trim().toLowerCase();
             return c === 'subject' || c === '予定の件名' || c === '件名';
@@ -982,7 +1096,7 @@ function handleCsvFileObject(file, inputElement) {
         };
 
         const addPlanIfNotDuplicate = (dKey, planText) => {
-            if (!schedules[dKey]) schedules[dKey] = [];
+            if (!schedules[dKey]) schedules[dKey] = new Array();
             const existingList = schedules[dKey];
             const newNorm = normalizePlanForDupCheck(planText);
 
@@ -998,21 +1112,21 @@ function handleCsvFileObject(file, inputElement) {
 
         let importedCount = 0;
         let duplicateCount = 0;
-        const skippedDetails = [];
+        const skippedDetails = new Array();
 
         for (let i = startIndex; i < rows.length; i++) {
-            const cols = rows[i];
+            const cols = rows.at(i);
             if (!cols || cols.every(c => !String(c || '').trim())) continue;
 
             if (isGoogleFormat) {
-                let subject = (cols[0] || '').trim();
-                const startDateStr = (cols[1] || '').trim();
-                const startTime = (cols[2] || '').trim();
-                const endDateStr = (cols[3] || '').trim() || startDateStr;
-                const endTime = (cols[4] || '').trim();
-                const allDayFlag = (cols[5] || '').trim().toLowerCase();
-                let description = (cols[6] || '').trim();
-                const location = (cols[7] || '').trim();
+                let subject = (cols.at(0) || '').trim();
+                const startDateStr = (cols.at(1) || '').trim();
+                const startTime = (cols.at(2) || '').trim();
+                const endDateStr = (cols.at(3) || '').trim() || startDateStr;
+                const endTime = (cols.at(4) || '').trim();
+                const allDayFlag = (cols.at(5) || '').trim().toLowerCase();
+                let description = (cols.at(6) || '').trim();
+                const location = (cols.at(7) || '').trim();
 
                 if (!startDateStr) {
                     skippedDetails.push(`${i + 1}行目: 開始日が空です`);
@@ -1023,10 +1137,10 @@ function handleCsvFileObject(file, inputElement) {
                     const nums = dStr.split(/[^0-9]+/).filter(Boolean).map(Number);
                     if (nums.length < 3) return null;
                     let y, m, d;
-                    if (nums[0] > 1000) {
-                        [y, m, d] = nums;
+                    if (nums.at(0) > 1000) {
+                        y = nums.at(0); m = nums.at(1); d = nums.at(2);
                     } else {
-                        [m, d, y] = nums;
+                        m = nums.at(0); d = nums.at(1); y = nums.at(2);
                     }
                     if (!y || !m || !d) return null;
                     return new Date(y, m - 1, d);
@@ -1043,8 +1157,8 @@ function handleCsvFileObject(file, inputElement) {
                 let iconPrefix = '';
                 const iconMatch = description.match(/^\[icon:(.*?)\]\s*/);
                 if (iconMatch) {
-                    iconPrefix = `[icon:${iconMatch[1]}] `;
-                    description = description.replace(iconMatch[0], '').trim();
+                    iconPrefix = `[icon:${iconMatch.at(1)}] `;
+                    description = description.replace(iconMatch.at(0), '').trim();
                 }
 
                 if (!subject) {
@@ -1056,11 +1170,11 @@ function handleCsvFileObject(file, inputElement) {
                     timePrefix = '[終日] ';
                 } else if (startTime) {
                     const sParts = startTime.split(':');
-                    const sTime = sParts.length >= 2 ? `${sParts[0].padStart(2, '0')}:${sParts[1].padStart(2, '0')}` : startTime;
+                    const sTime = sParts.length >= 2 ? `${sParts.at(0).padStart(2, '0')}:${sParts.at(1).padStart(2, '0')}` : startTime;
                     let eTime = sTime;
                     if (endTime) {
                         const eParts = endTime.split(':');
-                        eTime = eParts.length >= 2 ? `${eParts[0].padStart(2, '0')}:${eParts[1].padStart(2, '0')}` : endTime;
+                        eTime = eParts.length >= 2 ? `${eParts.at(0).padStart(2, '0')}:${eParts.at(1).padStart(2, '0')}` : endTime;
                     }
                     timePrefix = `[${sTime}～${eTime}] `;
                 }
@@ -1084,10 +1198,10 @@ function handleCsvFileObject(file, inputElement) {
                     safetyCounter++;
                 }
             } else {
-                const y = parseInt(String(cols[0] || '').replace(/\D/g, ''), 10);
-                const m = parseInt(String(cols[1] || '').replace(/\D/g, ''), 10);
-                const d = parseInt(String(cols[2] || '').replace(/\D/g, ''), 10);
-                const content = (cols[3] || '').trim();
+                const y = parseInt(String(cols.at(0) || '').replace(/\D/g, ''), 10);
+                const m = parseInt(String(cols.at(1) || '').replace(/\D/g, ''), 10);
+                const d = parseInt(String(cols.at(2) || '').replace(/\D/g, ''), 10);
+                const content = (cols.at(3) || '').trim();
                 if (!y || !m || !d || !content) {
                     skippedDetails.push(`${i + 1}行目: 旧形式のデータが不足しています`);
                     continue;
@@ -1125,24 +1239,8 @@ function importFromCSV(arg) {
     handleCsvFileObject(file, input);
 }
 
-function importCSV(arg) {
-    importFromCSV(arg);
-}
-
-document.addEventListener('change', function(e) {
-    const target = e.target;
-    if (target && target.tagName === 'INPUT' && target.type === 'file') {
-        const file = target.files ? target.files.item(0) : null;
-        if (file && file.name.toLowerCase().endsWith('.csv')) {
-            e.stopImmediatePropagation();
-            handleCsvFileObject(file, target);
-        }
-    }
-}, true);
-
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') render(true);
 });
 
-// 初回描画
 render(true);
