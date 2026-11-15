@@ -1,4 +1,5 @@
 window.CALENDAR_ICONS = [
+  "bank.png",
   "beauty_parlor.png",
   "birthday.png",
   "buddhist_service.png",
@@ -19,9 +20,9 @@ window.CALENDAR_ICONS = [
   "meal.png",
   "meeting.png",
   "movie.png",
-  "name.txt",
   "netevent.png",
   "paid_holiday.png",
+  "vacation.png",
   "party.png",
   "post.png",
   "sagawa.png",
@@ -31,7 +32,6 @@ window.CALENDAR_ICONS = [
   "star_blue.png",
   "travel.png",
   "tv.png",
-  "vacation.png",
   "wedding.png",
   "work.png",
   "yamato.png"
